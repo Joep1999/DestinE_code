@@ -128,8 +128,11 @@ def lt_dependent_cor_nwp(lt, correlations, outdir_path, n_model=0, skill_kwargs=
         n_model=n_model,
         skill_kwargs=skill_kwargs,
     )
+    print("clim_cor_values", clim_cor_values)
     # Determine the speed of the regression (eq. 24 in BPS2004)
     qm = np.exp(-lt / regr_pars[0, :]) * (2 - np.exp(-lt / regr_pars[1, :]))
+    print("qm", qm)
+    print("qm regression params", regr_pars)
     # Determine the correlation for lead time lt
     rho = qm * correlations + (1 - qm) * clim_cor_values
 

@@ -15,7 +15,7 @@ from datetime import datetime
 import numpy as np
 from matplotlib import pyplot as plt
 
-# sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code")
+sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code/pysteps")
 import pysteps
 
 print(pysteps.__file__)
@@ -256,8 +256,8 @@ print("Count of this number second var:", counts.max())
 
 precip_forecast_stacked = blending.steps.forecast(
     precip=radar_precip,
-    # precip_nowcast=radar_precip_nowcast,
-    # nowcasting_method="external_nowcast",
+    precip_nowcast=radar_precip_nowcast,
+    nowcasting_method="external_nowcast",
     mask_method=None,
     precip_models=nwp_precip,
     velocity=velocity_radar,
@@ -274,6 +274,15 @@ precip_forecast_stacked = blending.steps.forecast(
     probmatching_method="cdf",
     vel_pert_method=None,
 )
+
+phi_extra = [
+    [1.6206979, -0.62920261, 0.07931322],
+    [1.3792547, -0.45708808, 0.28680326],
+    [0.80645367, -0.06871943, 0.65463602],
+    [0.34624854, 0.01521149, 0.9360432],
+    [0.14283874, 0.11035506, 0.98099803],
+    [0.11959806, 0.1382874, 0.98080681],
+]
 
 
 precip_forecast_stacked = precip_forecast_stacked * 0
