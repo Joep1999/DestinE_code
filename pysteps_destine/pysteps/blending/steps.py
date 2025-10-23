@@ -1906,11 +1906,11 @@ class StepsBlendingNowcaster:
                     #     self.__state.precip_nowcast_timestep, n_ens_members_max, axis=0
                     # )
 
-                if n_model_members == n_ens_members_min and n_model_members != 1:
+                if n_model_members < n_ens_members_max and n_model_members != 1:
                     print("Repeating the NWP model for all ensemble members")
                     repeats = [
-                        (n_ens_members_max + i) // n_ens_members_min
-                        for i in range(n_ens_members_min)
+                        (n_ens_members_max + i) // n_model_members
+                        for i in range(n_model_members)
                     ]
                     repeat_precip_to_match_ensemble_size(repeats, "nwp")
                     # self.__state.precip_models_cascades_timestep = np.repeat(
@@ -1938,9 +1938,13 @@ class StepsBlendingNowcaster:
                     #     axis=0,
                     # )
                 if (
-                    n_ens_members_provided == n_ens_members_min
+                    n_ens_members_provided < n_ens_members_max
                     and n_ens_members_provided != 1
                 ):
+                    repeats = [
+                        (n_ens_members_max + i) // n_ens_members_provided
+                        for i in range(n_ens_members_provided)
+                    ]
                     repeat_precip_to_match_ensemble_size(repeats, "nowcast")
                     # print("Repeating the nowcast for all ensemble members")
                     # repeats = [
