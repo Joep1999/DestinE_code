@@ -254,6 +254,36 @@ most_common = values[np.argmax(counts)]
 print("Most common number second var:", most_common)
 print("Count of this number second var:", counts.max())
 
+GAMMA = np.array(
+    [
+        [0.99805, 0.9933],
+        [0.9925, 0.923],
+        [0.9776, 0.975],
+        [0.9297, 0.750],
+        [0.796, 0.367],
+        [0.482, 0.069],
+        [0.079, 0.0018],
+        [0.0006, 0.0014],
+    ]
+)
+
+
+regr_pars = np.array(
+    [
+        [130.0, 165.0, 120.0, 55.0, 50.0, 15.0, 15.0, 10.0],
+        [155.0, 220.0, 200.0, 75.0, 10e4, 10e4, 10e4, 10e4],
+    ]
+)
+from pysteps.blending import clim
+
+clim_cor_values = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+
+custom_weights = {
+    "GAMMA": GAMMA,
+    "regr_pars": regr_pars,
+    "clim_cor_values": clim_cor_values,
+}
+
 precip_forecast_stacked = blending.steps.forecast(
     precip=radar_precip,
     precip_nowcast=radar_precip_nowcast,
@@ -269,11 +299,29 @@ precip_forecast_stacked = blending.steps.forecast(
     # resample_distribution=False,
     precip_thr=radar_metadata["threshold"],
     kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
+    weights_method="custom",
+    custom_weights=custom_weights,
     # noise_stddev_adj=None,
     # noise_method=None,
     probmatching_method="cdf",
     vel_pert_method=None,
 )
+
+
+phi_extra = [
+    [1.6206979, -0.62920261, 0.07931322],
+    [1.3792547, -0.45708808, 0.28680326],
+    [0.80645367, -0.06871943, 0.65463602],
+    [0.34624854, 0.01521149, 0.9360432],
+    [0.14283874, 0.11035506, 0.98099803],
+    [0.11959806, 0.1382874, 0.98080681],
+]
+
+
+# Transform the data back into mm/h
+precip_forecast_mm, _ = converter(precip_forecast_stacked, radar_metadata)
+radar_precip_mm, _ = converter(radar_precip_nowcast, radar_metadata)
+nwp_precip_mm, _ = converter(nwp_precip, nwp_metadata)
 
 
 def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
@@ -316,12 +364,13 @@ def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
     cell_series = ens_fcst_all[:, :, lat_idx, lon_idx]  # [time, member]
     mean_series = np.mean(cell_series, axis=1)
 
-    cell_series_accum = accumulated_series = np.cumsum(cell_series, axis=0)
+    cell_series_accum = np.cumsum(cell_series, axis=0)
+    mean_series_accum = np.cumsum(mean_series, axis=0)
 
     plt.figure(figsize=(7, 4))
-    plt.plot(mean_series, "k-", lw=2, label="Ensemble mean")
+    plt.plot(mean_series_accum, "k-", lw=2, label="Ensemble mean")
     plt.plot(cell_series_accum, lw=0.8, alpha=0.5)
-    plt.xlabel("Forecast lead time index")
+    plt.xlabel("Model timestep (10 minutes per timestep)")
     plt.ylabel("Precipitation [mm]")
     plt.title(f"Time Series at Max-Precip Grid Cell (lat={lat_idx}, lon={lon_idx})")
     plt.legend()
@@ -339,29 +388,11 @@ def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
     }
 
 
-plot_hotspot_and_timeseries(precip_forecast_mm)
+precip_forecast_mm_accum = precip_forecast_mm / 6
+
+plot_hotspot_and_timeseries(precip_forecast_mm_accum)
 
 precip_forecast_stacked
-
-
-phi_extra = [
-    [1.6206979, -0.62920261, 0.07931322],
-    [1.3792547, -0.45708808, 0.28680326],
-    [0.80645367, -0.06871943, 0.65463602],
-    [0.34624854, 0.01521149, 0.9360432],
-    [0.14283874, 0.11035506, 0.98099803],
-    [0.11959806, 0.1382874, 0.98080681],
-]
-
-
-precip_forecast_stacked = precip_forecast_stacked * 0
-precip_forecast_stacked = precip_forecast_stacked - 1.1
-
-# Transform the data back into mm/h
-precip_forecast_mm, _ = converter(precip_forecast_stacked, radar_metadata)
-radar_precip_mm, _ = converter(radar_precip_nowcast, radar_metadata)
-nwp_precip_mm, _ = converter(nwp_precip, nwp_metadata)
-
 
 ################################################################################
 # Visualize the output
