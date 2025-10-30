@@ -15,7 +15,7 @@ from datetime import datetime
 import numpy as np
 from matplotlib import pyplot as plt
 
-sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code/pysteps")
+sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code/pysteps_destine")
 import pysteps
 
 print(pysteps.__file__)
@@ -265,7 +265,7 @@ precip_forecast_stacked = blending.steps.forecast(
     timesteps=18,
     timestep=timestep,
     issuetime=date_radar,
-    n_ens_members=5,
+    n_ens_members=25,
     # resample_distribution=False,
     precip_thr=radar_metadata["threshold"],
     kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
@@ -274,6 +274,75 @@ precip_forecast_stacked = blending.steps.forecast(
     probmatching_method="cdf",
     vel_pert_method=None,
 )
+
+
+def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
+    """
+    Identify and plot the grid cell with the highest ensemble precipitation
+    for a given forecast case, and show its ensemble time series.
+
+    Parameters
+    ----------
+    obs_all : np.ndarray
+        Observations [time, lat, lon]
+    ens_fcst_all : np.ndarray
+        Ensemble forecasts [time, member, lat, lon]
+    case_index : int
+        Index of the forecast case to inspect (default=0)
+    lats, lons : np.ndarray, optional
+        Latitude/longitude arrays for plotting
+    """
+    # --- Identify the hotspot grid cell
+    fcst_case = ens_fcst_all[case_index]  # [member, lat, lon]
+    ens_mean = np.mean(fcst_case, axis=0)
+    ens_max = np.max(fcst_case, axis=0)
+
+    # Find gridcell with maximum ensemble precipitation
+    hotspot_idx = np.unravel_index(np.argmax(ens_max), ens_max.shape)
+    lat_idx, lon_idx = hotspot_idx
+    hotspot_value = ens_max[lat_idx, lon_idx]
+
+    # --- Plot the spatial field with hotspot
+    # plt.figure(figsize=(7, 5))
+    # plt.imshow(ens_max, cmap="Blues", origin="lower")
+    # plt.scatter(lon_idx, lat_idx, color="red", s=80, label="Max gridcell")
+    # plt.colorbar(label="Max ensemble precipitation [mm]")
+    # plt.title(f"Ensemble Max Precipitation (case {case_index})\nMax={hotspot_value:.1f} mm")
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+    # --- Plot the time series for that grid cell
+    cell_series = ens_fcst_all[:, :, lat_idx, lon_idx]  # [time, member]
+    mean_series = np.mean(cell_series, axis=1)
+
+    cell_series_accum = accumulated_series = np.cumsum(cell_series, axis=0)
+
+    plt.figure(figsize=(7, 4))
+    plt.plot(mean_series, "k-", lw=2, label="Ensemble mean")
+    plt.plot(cell_series_accum, lw=0.8, alpha=0.5)
+    plt.xlabel("Forecast lead time index")
+    plt.ylabel("Precipitation [mm]")
+    plt.title(f"Time Series at Max-Precip Grid Cell (lat={lat_idx}, lon={lon_idx})")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    # plt.savefig(
+    # destineE_datafolder + 'verification/ensemble_spread_hotspot_' + str(date_str) + '.png', dpi=300
+    # )
+
+    return {
+        "hotspot_index": (lat_idx, lon_idx),
+        "hotspot_value": hotspot_value,
+        "cell_series": cell_series,
+        "mean_series": mean_series,
+    }
+
+
+plot_hotspot_and_timeseries(precip_forecast_mm)
+
+precip_forecast_stacked
+
 
 phi_extra = [
     [1.6206979, -0.62920261, 0.07931322],

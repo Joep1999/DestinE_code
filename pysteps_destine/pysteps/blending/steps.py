@@ -133,7 +133,7 @@ class StepsBlendingConfig:
       Name of the noise generator to use for perturbing the advection field. See
       the documentation of :py:mod:`pysteps.noise.interface`. If set to None, the advection
       field is not perturbed.
-    weights_method: {'bps','spn'}, optional
+    weights_method: {'bps','spn', 'custom'}, optional
       The calculation method of the blending weights. Options are the method
       by :cite:`BPS2006` and the covariance-based method by :cite:`SPN2013`.
       Defaults to bps.
@@ -430,6 +430,7 @@ class StepsBlendingNowcaster:
         precip_models,
         velocity,
         velocity_models,
+        custom_weights,
         time_steps,
         issue_time,
         steps_blending_config: StepsBlendingConfig,
@@ -441,6 +442,7 @@ class StepsBlendingNowcaster:
         self.__precip_models = precip_models
         self.__velocity = velocity
         self.__velocity_models = velocity_models
+        self.__custom_weights = custom_weights
         self.__timesteps = time_steps
         self.__issuetime = issue_time
 
@@ -1415,7 +1417,9 @@ class StepsBlendingNowcaster:
         """
         # If there are values in the radar fields, compute the auto-correlations
         GAMMA = np.empty((self.__config.n_cascade_levels, self.__config.ar_order))
-        if not self.__params.zero_precip_radar:
+        if self.__config.weights_method == "custom":
+            GAMMA = self.__custom_weights["GAMMA"]
+        elif not self.__params.zero_precip_radar:
             # compute lag-l temporal auto-correlation coefficients for each cascade level
             for i in range(self.__config.n_cascade_levels):
                 GAMMA[i, :] = correlation.temporal_autocorrelation(
@@ -1612,7 +1616,7 @@ class StepsBlendingNowcaster:
         self.__state.rho_extrap_cascade = self.__params.PHI[:, 0] / (
             1.0 - self.__params.PHI[:, 1]
         )
-        print("phi extrap:", self.__params.PHI)
+        # print("phi extrap:", self.__params.PHI)
 
     def __initialize_noise_cascades(self):
         """
@@ -1862,6 +1866,7 @@ class StepsBlendingNowcaster:
             if n_ens_members_min != n_ens_members_max:
                 if n_model_members == 1:
                     repeat_precip_to_match_ensemble_size(n_ens_members_max, "nwp")
+
                     # print("Repeating the NWP model for all ensemble members")
                     # self.__state.precip_models_cascades_timestep = np.repeat(
                     #     self.__state.precip_models_cascades_timestep,
@@ -1906,11 +1911,11 @@ class StepsBlendingNowcaster:
                     #     self.__state.precip_nowcast_timestep, n_ens_members_max, axis=0
                     # )
 
-                if n_model_members == n_ens_members_min and n_model_members != 1:
+                if n_model_members < n_ens_members_max and n_model_members != 1:
                     print("Repeating the NWP model for all ensemble members")
                     repeats = [
-                        (n_ens_members_max + i) // n_ens_members_min
-                        for i in range(n_ens_members_min)
+                        (n_ens_members_max + i) // n_model_members
+                        for i in range(n_model_members)
                     ]
                     repeat_precip_to_match_ensemble_size(repeats, "nwp")
                     # self.__state.precip_models_cascades_timestep = np.repeat(
@@ -1938,9 +1943,14 @@ class StepsBlendingNowcaster:
                     #     axis=0,
                     # )
                 if (
-                    n_ens_members_provided == n_ens_members_min
+                    n_ens_members_provided < n_ens_members_max
                     and n_ens_members_provided != 1
                 ):
+                    print("Repeating the external nowcast for all ensemble members")
+                    repeats = [
+                        (n_ens_members_max + i) // n_ens_members_provided
+                        for i in range(n_ens_members_provided)
+                    ]
                     repeat_precip_to_match_ensemble_size(repeats, "nowcast")
                     # print("Repeating the nowcast for all ensemble members")
                     # repeats = [
@@ -2088,8 +2098,8 @@ class StepsBlendingNowcaster:
                 outdir_path=self.__config.outdir_path_skill,
                 **self.__params.climatology_kwargs,
             )
-            print("rho nwp_models:", self.__params.rho_nwp_models)
-            print("phi extrap:", self.__params.PHI)
+            # print("rho nwp_models:", self.__params.rho_nwp_models)
+            # print("phi extrap:", self.__params.PHI)
         if t > 0:
             # Determine the skill of the components for lead time (t0 + t)
             # First for the extrapolation component. Only calculate it when t > 0.
@@ -2101,8 +2111,7 @@ class StepsBlendingNowcaster:
                 correlations=self.__state.rho_extrap_cascade,
                 correlations_prev=self.__state.rho_extrap_cascade_prev,
             )
-
-        print("rho extrap:", self.__state.rho_extrap_cascade)
+        # print("rho extrap:", self.__state.rho_extrap_cascade)
 
     def __determine_NWP_skill_for_next_timestep(self, t, j, worker_state):
         """
@@ -2126,6 +2135,23 @@ class StepsBlendingNowcaster:
             worker_state.rho_final_blended_forecast = np.concatenate(
                 (worker_state.rho_extrap_cascade[None, :], rho_nwp_forecast), axis=0
             )
+        elif self.__config.weights_method == "custom":
+            # TODO: check if j is the best accessor for this variable
+            rho_nwp_forecast = blending.skill_scores.lt_dependent_cor_nwp(
+                lt=(t * int(self.__config.timestep)),
+                correlations=self.__params.rho_nwp_models[j],
+                outdir_path=self.__config.outdir_path_skill,
+                n_model=worker_state.mapping_list_NWP_member_to_ensemble_member[j],
+                skill_kwargs=self.__params.climatology_kwargs,
+                regr_pars=self.__custom_weights["regr_pars"],
+                clim_cor_values=self.__custom_weights["clim_cor_values"],
+            )
+            # Concatenate rho_extrap_cascade and rho_nwp
+            worker_state.rho_final_blended_forecast = np.concatenate(
+                (worker_state.rho_extrap_cascade[None, :], rho_nwp_forecast[None, :]),
+                axis=0,
+            )
+
         else:
             # TODO: check if j is the best accessor for this variable
             rho_nwp_forecast = blending.skill_scores.lt_dependent_cor_nwp(
@@ -2140,8 +2166,8 @@ class StepsBlendingNowcaster:
                 (worker_state.rho_extrap_cascade[None, :], rho_nwp_forecast[None, :]),
                 axis=0,
             )
-        print("rho nwp_models:", self.__params.rho_nwp_models)
-        print(" rho_nwp_forecast:", rho_nwp_forecast)
+        # print("rho nwp_models:", self.__params.rho_nwp_models)
+        # print(" rho_nwp_forecast:", rho_nwp_forecast)
 
     def __determine_weights_per_component(self, worker_state):
         """
@@ -2159,7 +2185,10 @@ class StepsBlendingNowcaster:
         )
 
         # The model only weights
-        if self.__config.weights_method == "bps":
+        if (
+            self.__config.weights_method == "bps"
+            or self.__config.weights_method == "custom"
+        ):
             # Determine the weights of the components without the extrapolation
             # cascade, in case this is no data or outside the mask.
             worker_state.weights_model_only = calculate_weights_bps(
@@ -3329,6 +3358,7 @@ def forecast(
     ar_order=2,
     vel_pert_method="bps",
     weights_method="bps",
+    custom_weights=None,
     conditional=False,
     probmatching_method="cdf",
     mask_method="incremental",
@@ -3695,6 +3725,7 @@ def forecast(
         precip_models,
         velocity,
         velocity_models,
+        custom_weights,
         timesteps,
         issuetime,
         blending_config,
