@@ -64,8 +64,8 @@ nwp_data_source = rcparams.data_sources["bom_nwp"]
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 root_path = radar_data_source["root_path"]
-root_path_nwp = "../../pysteps-data/nwp/bom"
-root_path = "../../pysteps-data/radar/bom"
+root_path_nwp = "../pysteps-data/nwp/bom"
+root_path = "../pysteps-data/radar/bom"
 path_fmt = "prcp-c10/66/%Y/%m/%d"
 fn_pattern = "66_%Y%m%d_%H%M00.prcp-c10"
 fn_ext = radar_data_source["fn_ext"]
@@ -299,8 +299,8 @@ precip_forecast_stacked = blending.steps.forecast(
     # resample_distribution=False,
     precip_thr=radar_metadata["threshold"],
     kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
-    weights_method="custom",
-    custom_weights=custom_weights,
+    # weights_method="custom",
+    # custom_weights=custom_weights,
     # noise_stddev_adj=None,
     # noise_method=None,
     probmatching_method="cdf",
