@@ -1946,7 +1946,6 @@ class StepsBlendingNowcaster:
                     n_ens_members_provided < n_ens_members_max
                     and n_ens_members_provided != 1
                 ):
-                    print("Repeating the external nowcast for all ensemble members")
                     repeats = [
                         (n_ens_members_max + i) // n_ens_members_provided
                         for i in range(n_ens_members_provided)
