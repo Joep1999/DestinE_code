@@ -1616,7 +1616,6 @@ class StepsBlendingNowcaster:
         self.__state.rho_extrap_cascade = self.__params.PHI[:, 0] / (
             1.0 - self.__params.PHI[:, 1]
         )
-        # print("phi extrap:", self.__params.PHI)
 
     def __initialize_noise_cascades(self):
         """
@@ -1867,49 +1866,8 @@ class StepsBlendingNowcaster:
                 if n_model_members == 1:
                     repeat_precip_to_match_ensemble_size(n_ens_members_max, "nwp")
 
-                    # print("Repeating the NWP model for all ensemble members")
-                    # self.__state.precip_models_cascades_timestep = np.repeat(
-                    #     self.__state.precip_models_cascades_timestep,
-                    #     n_ens_members_max,
-                    #     axis=0,
-                    # )
-                    # self.__state.mean_models_timestep = np.repeat(
-                    #     self.__state.mean_models_timestep, n_ens_members_max, axis=0
-                    # )
-                    # self.__state.std_models_timestep = np.repeat(
-                    #     self.__state.std_models_timestep, n_ens_members_max, axis=0
-                    # )
-                    # self.__state.velocity_models_timestep = np.repeat(
-                    #     self.__state.velocity_models_timestep, n_ens_members_max, axis=0
-                    # )
-                    # # For the prob. matching
-                    # self.__state.precip_models_timestep = np.repeat(
-                    #     self.__state.precip_models_timestep, n_ens_members_max, axis=0
-                    # )
-                    # # Finally, for the model indices
-                    # self.__state.mapping_list_NWP_member_to_ensemble_member = np.repeat(
-                    #     self.__state.mapping_list_NWP_member_to_ensemble_member,
-                    #     n_ens_members_max,
-                    #     axis=0,
-                    # )
                 if n_ens_members_provided == 1:
                     repeat_precip_to_match_ensemble_size(n_ens_members_max, "nowcast")
-                    # print("Repeating the nowcast for all ensemble members")
-                    # self.__state.precip_nowcast_cascades = np.repeat(
-                    #     self.__state.precip_nowcast_cascades,
-                    #     n_ens_members_max,
-                    #     axis=0,
-                    # )
-                    # self.__state.mean_nowcast = np.repeat(
-                    #     self.__state.mean_nowcast, n_ens_members_max, axis=0
-                    # )
-                    # self.__state.std_nowcast = np.repeat(
-                    #     self.__state.std_nowcast, n_ens_members_max, axis=0
-                    # )
-                    # # For the prob. matching
-                    # self.__state.precip_nowcast_timestep = np.repeat(
-                    #     self.__state.precip_nowcast_timestep, n_ens_members_max, axis=0
-                    # )
 
                 if n_model_members < n_ens_members_max and n_model_members != 1:
                     print("Repeating the NWP model for all ensemble members")
@@ -1918,30 +1876,7 @@ class StepsBlendingNowcaster:
                         for i in range(n_model_members)
                     ]
                     repeat_precip_to_match_ensemble_size(repeats, "nwp")
-                    # self.__state.precip_models_cascades_timestep = np.repeat(
-                    #     self.__state.precip_models_cascades_timestep,
-                    #     repeats,
-                    #     axis=0,
-                    # )
-                    # self.__state.mean_models_timestep = np.repeat(
-                    #     self.__state.mean_models_timestep, repeats, axis=0
-                    # )
-                    # self.__state.std_models_timestep = np.repeat(
-                    #     self.__state.std_models_timestep, repeats, axis=0
-                    # )
-                    # self.__state.velocity_models_timestep = np.repeat(
-                    #     self.__state.velocity_models_timestep, repeats, axis=0
-                    # )
-                    # # For the prob. matching
-                    # self.__state.precip_models_timestep = np.repeat(
-                    #     self.__state.precip_models_timestep, repeats, axis=0
-                    # )
-                    # # Finally, for the model indices
-                    # self.__state.mapping_list_NWP_member_to_ensemble_member = np.repeat(
-                    #     self.__state.mapping_list_NWP_member_to_ensemble_member,
-                    #     repeats,
-                    #     axis=0,
-                    # )
+
                 if (
                     n_ens_members_provided < n_ens_members_max
                     and n_ens_members_provided != 1
@@ -1951,26 +1886,6 @@ class StepsBlendingNowcaster:
                         for i in range(n_ens_members_provided)
                     ]
                     repeat_precip_to_match_ensemble_size(repeats, "nowcast")
-                    # print("Repeating the nowcast for all ensemble members")
-                    # repeats = [
-                    #     (n_ens_members_max + i) // n_ens_members_min
-                    #     for i in range(n_ens_members_min)
-                    # ]
-                    # self.__state.precip_nowcast_cascades = np.repeat(
-                    #     self.__state.precip_nowcast_cascades,
-                    #     repeats,
-                    #     axis=0,
-                    # )
-                    # self.__state.mean_nowcast = np.repeat(
-                    #     self.__state.mean_nowcast, repeats, axis=0
-                    # )
-                    # self.__state.std_nowcast = np.repeat(
-                    #     self.__state.std_nowcast, repeats, axis=0
-                    # )
-                    # # For the prob. matching
-                    # self.__state.precip_nowcast_timestep = np.repeat(
-                    #     self.__state.precip_nowcast_timestep, repeats, axis=0
-                    # )
 
         else:
             # Start with determining the maximum and mimimum number of members/models
@@ -2097,8 +2012,6 @@ class StepsBlendingNowcaster:
                 outdir_path=self.__config.outdir_path_skill,
                 **self.__params.climatology_kwargs,
             )
-            # print("rho nwp_models:", self.__params.rho_nwp_models)
-            # print("phi extrap:", self.__params.PHI)
         if t > 0:
             # Determine the skill of the components for lead time (t0 + t)
             # First for the extrapolation component. Only calculate it when t > 0.
@@ -2110,7 +2023,6 @@ class StepsBlendingNowcaster:
                 correlations=self.__state.rho_extrap_cascade,
                 correlations_prev=self.__state.rho_extrap_cascade_prev,
             )
-        # print("rho extrap:", self.__state.rho_extrap_cascade)
 
     def __determine_NWP_skill_for_next_timestep(self, t, j, worker_state):
         """
@@ -2165,8 +2077,6 @@ class StepsBlendingNowcaster:
                 (worker_state.rho_extrap_cascade[None, :], rho_nwp_forecast[None, :]),
                 axis=0,
             )
-        # print("rho nwp_models:", self.__params.rho_nwp_models)
-        # print(" rho_nwp_forecast:", rho_nwp_forecast)
 
     def __determine_weights_per_component(self, worker_state):
         """
