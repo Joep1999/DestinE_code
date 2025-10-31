@@ -283,7 +283,7 @@ custom_weights = {
     "regr_pars": regr_pars,
     "clim_cor_values": clim_cor_values,
 }
-
+print("hi")
 precip_forecast_stacked = blending.steps.forecast(
     precip=radar_precip,
     precip_nowcast=radar_precip_nowcast,
