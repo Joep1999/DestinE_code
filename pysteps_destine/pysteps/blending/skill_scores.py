@@ -78,11 +78,18 @@ def spatial_correlation(obs, mod, domain_mask):
     return rho
 
 
-def lt_dependent_cor_nwp(lt, correlations, outdir_path, n_model=0, skill_kwargs=None):
+def lt_dependent_cor_nwp(
+    lt,
+    correlations,
+    outdir_path,
+    n_model=0,
+    skill_kwargs=None,
+    regr_pars=None,
+    clim_cor_values=None,
+):
     """Determine the correlation of a model field for lead time lt and
     cascade k, by assuming that the correlation determined at t=0 regresses
     towards the climatological values.
-
 
     Parameters
     ----------
@@ -127,12 +134,14 @@ def lt_dependent_cor_nwp(lt, correlations, outdir_path, n_model=0, skill_kwargs=
         outdir_path=outdir_path,
         n_model=n_model,
         skill_kwargs=skill_kwargs,
+        regr_pars=regr_pars,
+        clim_cor_values=clim_cor_values,
     )
-    print("clim_cor_values", clim_cor_values)
+    # print("clim_cor_values", clim_cor_values)
     # Determine the speed of the regression (eq. 24 in BPS2004)
     qm = np.exp(-lt / regr_pars[0, :]) * (2 - np.exp(-lt / regr_pars[1, :]))
-    print("qm", qm)
-    print("qm regression params", regr_pars)
+    # print("qm", qm)
+    # print("qm regression params", regr_pars)
     # Determine the correlation for lead time lt
     rho = qm * correlations + (1 - qm) * clim_cor_values
 
@@ -187,7 +196,14 @@ def lt_dependent_cor_extrapolation(PHI, correlations=None, correlations_prev=Non
     return rho, rho_prev
 
 
-def clim_regr_values(n_cascade_levels, outdir_path, n_model=0, skill_kwargs=None):
+def clim_regr_values(
+    n_cascade_levels,
+    outdir_path,
+    n_model=0,
+    skill_kwargs=None,
+    regr_pars=None,
+    clim_cor_values=None,
+):
     """Obtains the climatological correlation values and regression parameters
     from a file called NWP_weights_window.bin in the outdir_path. If this file
     is not present yet, the values from :cite:`BPS2004` are used.
@@ -238,18 +254,21 @@ def clim_regr_values(n_cascade_levels, outdir_path, n_model=0, skill_kwargs=None
         skill_kwargs = {"n_models": 1}
 
     # First, obtain climatological skill values
-    try:
-        clim_cor_values = clim.calc_clim_skill(
-            outdir_path=outdir_path, n_cascade_levels=n_cascade_levels, **skill_kwargs
-        )
-    except FileNotFoundError:
-        # The climatological skill values file does not exist yet, so we'll
-        # use the default values from BPS2004.
-        clim_cor_values = clim.get_default_skill(
-            n_cascade_levels=n_cascade_levels, n_models=skill_kwargs["n_models"]
-        )
+    if clim_cor_values is None:
+        try:
+            clim_cor_values = clim.calc_clim_skill(
+                outdir_path=outdir_path,
+                n_cascade_levels=n_cascade_levels,
+                **skill_kwargs,
+            )
+        except FileNotFoundError:
+            # The climatological skill values file does not exist yet, so we'll
+            # use the default values from BPS2004.
+            clim_cor_values = clim.get_default_skill(
+                n_cascade_levels=n_cascade_levels, n_models=skill_kwargs["n_models"]
+            )
 
-    clim_cor_values = clim_cor_values[n_model, :]
+            clim_cor_values = clim_cor_values[n_model, :]
 
     # Check if clim_cor_values has only one model, otherwise it has
     # returned the skill values for multiple models
@@ -269,13 +288,13 @@ def clim_regr_values(n_cascade_levels, outdir_path, n_model=0, skill_kwargs=None
 
     # Get the regression parameters (L in eq. 24 in BPS2004) - Hard coded,
     # change to own values when present.
-    regr_pars = np.array(
-        [
-            [130.0, 165.0, 120.0, 55.0, 50.0, 15.0, 15.0, 10.0],
-            [155.0, 220.0, 200.0, 75.0, 10e4, 10e4, 10e4, 10e4],
-        ]
-    )
-
+    if regr_pars is None:
+        regr_pars = np.array(
+            [
+                [130.0, 165.0, 120.0, 55.0, 50.0, 15.0, 15.0, 10.0],
+                [155.0, 220.0, 200.0, 75.0, 10e4, 10e4, 10e4, 10e4],
+            ]
+        )
     # Check whether the number of cascade_levels is correct
     if regr_pars.shape[1] > n_cascade_levels:
         regr_pars = regr_pars[:, 0:n_cascade_levels]

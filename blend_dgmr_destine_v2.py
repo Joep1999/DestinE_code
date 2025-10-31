@@ -15,7 +15,7 @@ from datetime import datetime
 import numpy as np
 from matplotlib import pyplot as plt
 
-sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code/pysteps")
+sys.path.insert(1, "C:/Users/Joep.Bosdijk/git/DestinE_code/pysteps_destine")
 import pysteps
 
 print(pysteps.__file__)
@@ -254,6 +254,36 @@ most_common = values[np.argmax(counts)]
 print("Most common number second var:", most_common)
 print("Count of this number second var:", counts.max())
 
+GAMMA = np.array(
+    [
+        [0.99805, 0.9933],
+        [0.9925, 0.923],
+        [0.9776, 0.975],
+        [0.9297, 0.750],
+        [0.796, 0.367],
+        [0.482, 0.069],
+        [0.079, 0.0018],
+        [0.0006, 0.0014],
+    ]
+)
+
+
+regr_pars = np.array(
+    [
+        [130.0, 165.0, 120.0, 55.0, 50.0, 15.0, 15.0, 10.0],
+        [155.0, 220.0, 200.0, 75.0, 10e4, 10e4, 10e4, 10e4],
+    ]
+)
+from pysteps.blending import clim
+
+clim_cor_values = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+
+custom_weights = {
+    "GAMMA": GAMMA,
+    "regr_pars": regr_pars,
+    "clim_cor_values": clim_cor_values,
+}
+
 precip_forecast_stacked = blending.steps.forecast(
     precip=radar_precip,
     precip_nowcast=radar_precip_nowcast,
@@ -265,15 +295,18 @@ precip_forecast_stacked = blending.steps.forecast(
     timesteps=18,
     timestep=timestep,
     issuetime=date_radar,
-    n_ens_members=5,
+    n_ens_members=25,
     # resample_distribution=False,
     precip_thr=radar_metadata["threshold"],
     kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
+    weights_method="custom",
+    custom_weights=custom_weights,
     # noise_stddev_adj=None,
     # noise_method=None,
     probmatching_method="cdf",
     vel_pert_method=None,
 )
+
 
 phi_extra = [
     [1.6206979, -0.62920261, 0.07931322],
@@ -285,14 +318,81 @@ phi_extra = [
 ]
 
 
-precip_forecast_stacked = precip_forecast_stacked * 0
-precip_forecast_stacked = precip_forecast_stacked - 1.1
-
 # Transform the data back into mm/h
 precip_forecast_mm, _ = converter(precip_forecast_stacked, radar_metadata)
 radar_precip_mm, _ = converter(radar_precip_nowcast, radar_metadata)
 nwp_precip_mm, _ = converter(nwp_precip, nwp_metadata)
 
+
+def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
+    """
+    Identify and plot the grid cell with the highest ensemble precipitation
+    for a given forecast case, and show its ensemble time series.
+
+    Parameters
+    ----------
+    obs_all : np.ndarray
+        Observations [time, lat, lon]
+    ens_fcst_all : np.ndarray
+        Ensemble forecasts [time, member, lat, lon]
+    case_index : int
+        Index of the forecast case to inspect (default=0)
+    lats, lons : np.ndarray, optional
+        Latitude/longitude arrays for plotting
+    """
+    # --- Identify the hotspot grid cell
+    fcst_case = ens_fcst_all[case_index]  # [member, lat, lon]
+    ens_mean = np.mean(fcst_case, axis=0)
+    ens_max = np.max(fcst_case, axis=0)
+
+    # Find gridcell with maximum ensemble precipitation
+    hotspot_idx = np.unravel_index(np.argmax(ens_max), ens_max.shape)
+    lat_idx, lon_idx = hotspot_idx
+    hotspot_value = ens_max[lat_idx, lon_idx]
+
+    # --- Plot the spatial field with hotspot
+    # plt.figure(figsize=(7, 5))
+    # plt.imshow(ens_max, cmap="Blues", origin="lower")
+    # plt.scatter(lon_idx, lat_idx, color="red", s=80, label="Max gridcell")
+    # plt.colorbar(label="Max ensemble precipitation [mm]")
+    # plt.title(f"Ensemble Max Precipitation (case {case_index})\nMax={hotspot_value:.1f} mm")
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+    # --- Plot the time series for that grid cell
+    cell_series = ens_fcst_all[:, :, lat_idx, lon_idx]  # [time, member]
+    mean_series = np.mean(cell_series, axis=1)
+
+    cell_series_accum = np.cumsum(cell_series, axis=0)
+    mean_series_accum = np.cumsum(mean_series, axis=0)
+
+    plt.figure(figsize=(7, 4))
+    plt.plot(mean_series_accum, "k-", lw=2, label="Ensemble mean")
+    plt.plot(cell_series_accum, lw=0.8, alpha=0.5)
+    plt.xlabel("Model timestep (10 minutes per timestep)")
+    plt.ylabel("Precipitation [mm]")
+    plt.title(f"Time Series at Max-Precip Grid Cell (lat={lat_idx}, lon={lon_idx})")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    # plt.savefig(
+    # destineE_datafolder + 'verification/ensemble_spread_hotspot_' + str(date_str) + '.png', dpi=300
+    # )
+
+    return {
+        "hotspot_index": (lat_idx, lon_idx),
+        "hotspot_value": hotspot_value,
+        "cell_series": cell_series,
+        "mean_series": mean_series,
+    }
+
+
+precip_forecast_mm_accum = precip_forecast_mm / 6
+
+plot_hotspot_and_timeseries(precip_forecast_mm_accum)
+
+precip_forecast_stacked
 
 ################################################################################
 # Visualize the output
