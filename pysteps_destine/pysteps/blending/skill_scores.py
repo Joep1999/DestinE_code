@@ -129,14 +129,22 @@ def lt_dependent_cor_nwp(
 
     # Obtain the climatological values towards which the correlations will
     # regress
-    clim_cor_values, regr_pars = clim_regr_values(
-        n_cascade_levels=len(correlations),
-        outdir_path=outdir_path,
-        n_model=n_model,
-        skill_kwargs=skill_kwargs,
-        regr_pars=regr_pars,
-        clim_cor_values=clim_cor_values,
-    )
+    if clim_cor_values is None:
+        clim_cor_values, regr_pars = clim_regr_values(
+            n_cascade_levels=len(correlations),
+            outdir_path=outdir_path,
+            n_model=n_model,
+            skill_kwargs=skill_kwargs,
+        )
+    else:
+        clim_cor_values, regr_pars = clim_regr_values(
+            n_cascade_levels=len(correlations),
+            outdir_path=outdir_path,
+            n_model=n_model,
+            skill_kwargs=skill_kwargs,
+            regr_pars=regr_pars,
+            clim_cor_values=clim_cor_values,
+        )
     # print("clim_cor_values", clim_cor_values)
     # Determine the speed of the regression (eq. 24 in BPS2004)
     qm = np.exp(-lt / regr_pars[0, :]) * (2 - np.exp(-lt / regr_pars[1, :]))
@@ -268,7 +276,7 @@ def clim_regr_values(
                 n_cascade_levels=n_cascade_levels, n_models=skill_kwargs["n_models"]
             )
 
-            clim_cor_values = clim_cor_values[n_model, :]
+        clim_cor_values = clim_cor_values[n_model, :]
 
     # Check if clim_cor_values has only one model, otherwise it has
     # returned the skill values for multiple models
