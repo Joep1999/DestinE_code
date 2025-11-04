@@ -153,7 +153,7 @@ def lt_dependent_cor_nwp(
     # Determine the correlation for lead time lt
     rho = qm * correlations + (1 - qm) * clim_cor_values
 
-    return rho
+    return rho, clim_cor_values, regr_pars
 
 
 def lt_dependent_cor_extrapolation(PHI, correlations=None, correlations_prev=None):

@@ -307,6 +307,7 @@ class StepsBlendingConfig:
     climatology_kwargs: dict[str, Any] = field(default_factory=dict)
     mask_kwargs: dict[str, Any] = field(default_factory=dict)
     measure_time: bool = False
+    return_weights: bool = False
     callback: Any | None = None
     return_output: bool = True
 
@@ -402,6 +403,10 @@ class StepsBlendingState:
     final_blended_forecast_cascades_mod_only: np.ndarray | None = None
     final_blended_forecast_recomposed: np.ndarray | None = None
     final_blended_forecast_recomposed_mod_only: np.ndarray | None = None
+    GAMMA_out: np.ndarray | None = None
+    clim_cor_out: np.ndarray | None = None
+    regr_pars_out: np.ndarray | None = None
+    weights_complete: np.ndarray | None = None
 
     # Final outputs
     final_blended_forecast: np.ndarray | None = None
@@ -595,6 +600,16 @@ class StepsBlendingNowcaster:
                         self.__init_time,
                         self.__mainloop_time,
                     )
+                elif self.__config.return_weights:
+                    return (
+                        self.__state.final_blended_forecast,
+                        {
+                            "weights": self.__state.weights_complete,
+                            "GAMMA": self.__state.GAMMA_out,
+                            "clim_cor": self.__state.clim_cor_out,
+                            "regr_pars": self.__state.regr_pars_out,
+                        },
+                    )
                 else:
                     return self.__state.final_blended_forecast
             else:
@@ -703,6 +718,16 @@ class StepsBlendingNowcaster:
                     self.__state.final_blended_forecast[j].extend(
                         final_blended_forecast_all_members_one_timestep[j]
                     )
+            if self.__config.return_weights:
+                if self.__state.weights_complete is None:
+                    self.__state.weights_complete = np.zeros(
+                        (
+                            3,
+                            self.__config.n_cascade_levels,
+                            len(self.__timesteps),
+                        )
+                    )
+                self.__state.weights_complete[:, :, t] = self.__state.worker_weights
 
             final_blended_forecast_all_members_one_timestep = None
         if self.__config.measure_time:
@@ -1468,6 +1493,7 @@ class StepsBlendingNowcaster:
 
         # Print the GAMMA value
         nowcast_utils.print_corrcoefs(GAMMA)
+        self.__state.GAMMA_out = GAMMA.copy()
 
         if self.__config.ar_order == 2:
             # adjust the lag-2 correlation coefficient to ensure that the AR(p)
@@ -2033,12 +2059,14 @@ class StepsBlendingNowcaster:
         if self.__config.blend_nwp_members:
             rho_nwp_forecast = []
             for model_index in range(self.__params.rho_nwp_models.shape[0]):
-                rho_value = blending.skill_scores.lt_dependent_cor_nwp(
-                    lt=(t * int(self.__config.timestep)),
-                    correlations=self.__params.rho_nwp_models[model_index],
-                    outdir_path=self.__config.outdir_path_skill,
-                    n_model=model_index,
-                    skill_kwargs=self.__params.climatology_kwargs,
+                rho_value, clim_cor_values, regr_pars = (
+                    blending.skill_scores.lt_dependent_cor_nwp(
+                        lt=(t * int(self.__config.timestep)),
+                        correlations=self.__params.rho_nwp_models[model_index],
+                        outdir_path=self.__config.outdir_path_skill,
+                        n_model=model_index,
+                        skill_kwargs=self.__params.climatology_kwargs,
+                    )
                 )
                 rho_nwp_forecast.append(rho_value)
             rho_nwp_forecast = np.stack(rho_nwp_forecast)
@@ -2048,14 +2076,16 @@ class StepsBlendingNowcaster:
             )
         elif self.__config.weights_method == "custom":
             # TODO: check if j is the best accessor for this variable
-            rho_nwp_forecast = blending.skill_scores.lt_dependent_cor_nwp(
-                lt=(t * int(self.__config.timestep)),
-                correlations=self.__params.rho_nwp_models[j],
-                outdir_path=self.__config.outdir_path_skill,
-                n_model=worker_state.mapping_list_NWP_member_to_ensemble_member[j],
-                skill_kwargs=self.__params.climatology_kwargs,
-                regr_pars=self.__custom_weights["regr_pars"],
-                clim_cor_values=self.__custom_weights["clim_cor_values"],
+            rho_nwp_forecast, clim_cor_values, regr_pars = (
+                blending.skill_scores.lt_dependent_cor_nwp(
+                    lt=(t * int(self.__config.timestep)),
+                    correlations=self.__params.rho_nwp_models[j],
+                    outdir_path=self.__config.outdir_path_skill,
+                    n_model=worker_state.mapping_list_NWP_member_to_ensemble_member[j],
+                    skill_kwargs=self.__params.climatology_kwargs,
+                    regr_pars=self.__custom_weights["regr_pars"],
+                    clim_cor_values=self.__custom_weights["clim_cor_values"],
+                )
             )
             # Concatenate rho_extrap_cascade and rho_nwp
             worker_state.rho_final_blended_forecast = np.concatenate(
@@ -2065,18 +2095,22 @@ class StepsBlendingNowcaster:
 
         else:
             # TODO: check if j is the best accessor for this variable
-            rho_nwp_forecast = blending.skill_scores.lt_dependent_cor_nwp(
-                lt=(t * int(self.__config.timestep)),
-                correlations=self.__params.rho_nwp_models[j],
-                outdir_path=self.__config.outdir_path_skill,
-                n_model=worker_state.mapping_list_NWP_member_to_ensemble_member[j],
-                skill_kwargs=self.__params.climatology_kwargs,
+            rho_nwp_forecast, clim_cor_values, regr_pars = (
+                blending.skill_scores.lt_dependent_cor_nwp(
+                    lt=(t * int(self.__config.timestep)),
+                    correlations=self.__params.rho_nwp_models[j],
+                    outdir_path=self.__config.outdir_path_skill,
+                    n_model=worker_state.mapping_list_NWP_member_to_ensemble_member[j],
+                    skill_kwargs=self.__params.climatology_kwargs,
+                )
             )
             # Concatenate rho_extrap_cascade and rho_nwp
             worker_state.rho_final_blended_forecast = np.concatenate(
                 (worker_state.rho_extrap_cascade[None, :], rho_nwp_forecast[None, :]),
                 axis=0,
             )
+        self.__state.clim_cor_out = clim_cor_values
+        self.__state.regr_pars_out = regr_pars
 
     def __determine_weights_per_component(self, worker_state):
         """
@@ -2092,6 +2126,7 @@ class StepsBlendingNowcaster:
         worker_state.weights = calculate_weights_bps(
             worker_state.rho_final_blended_forecast
         )
+        self.__state.worker_weights = worker_state.weights
 
         # The model only weights
         if (
@@ -3286,6 +3321,7 @@ def forecast(
     vel_pert_kwargs=None,
     clim_kwargs=None,
     mask_kwargs=None,
+    return_weights=False,
     measure_time=False,
 ):
     """
@@ -3617,6 +3653,7 @@ def forecast(
         climatology_kwargs=clim_kwargs,
         mask_kwargs=mask_kwargs,
         measure_time=measure_time,
+        return_weights=return_weights,
         callback=callback,
         return_output=return_output,
     )

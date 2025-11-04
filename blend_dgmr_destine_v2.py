@@ -295,28 +295,22 @@ precip_forecast_stacked = blending.steps.forecast(
     timesteps=18,
     timestep=timestep,
     issuetime=date_radar,
-    n_ens_members=25,
+    n_ens_members=5,
     # resample_distribution=False,
     precip_thr=radar_metadata["threshold"],
     kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
     # weights_method="custom",
     # custom_weights=custom_weights,
+    return_weights=True,
     # noise_stddev_adj=None,
     # noise_method=None,
     probmatching_method="cdf",
     vel_pert_method=None,
 )
-
-
-phi_extra = [
-    [1.6206979, -0.62920261, 0.07931322],
-    [1.3792547, -0.45708808, 0.28680326],
-    [0.80645367, -0.06871943, 0.65463602],
-    [0.34624854, 0.01521149, 0.9360432],
-    [0.14283874, 0.11035506, 0.98099803],
-    [0.11959806, 0.1382874, 0.98080681],
-]
-
+import xarray as xr
+import matplotlib.pyplot as plt
+import numpy as np
+from urllib.parse import parse_qs
 
 # Transform the data back into mm/h
 precip_forecast_mm, _ = converter(precip_forecast_stacked, radar_metadata)
