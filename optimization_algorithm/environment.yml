@@ -1,0 +1,41 @@
+name: pysteps-env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Core Python setup
+  - python=3.10.13
+  - pip
+  - cdo=2.5.0
+  - eccodes=2.43.0
+  - netcdf4=1.7.2
+  - cfgrib=0.9.15.1
+  - xarray=2025.6.1
+  - numpy=2.2.6
+  - pandas=2.3.2
+  - scipy=1.15.3
+  - matplotlib=3.10.6
+  - h5py=3.14.0
+  - pillow=11.3.0
+  - shapely=2.1.2
+  - rasterio=1.4.3
+  - pyproj=3.7.1
+  - geopandas=1.1.1
+  - requests=2.32.5
+  - certifi=2025.8.3
+  - protobuf=6.32.1
+  - tensorflow=2.20.0
+  - tensorflow-hub=0.16.1
+  - tensorboard=2.20.0
+  - keras=3.11.3
+  - polytope-client=0.7.7
+
+  # System libraries needed by pysteps and TensorFlow
+  - libgdal
+  - proj
+  - cartopy
+  - dask
+
+  - pip:
+      - git+https://github.com/Joep1999/DestinE_code.git#pysteps_destine
