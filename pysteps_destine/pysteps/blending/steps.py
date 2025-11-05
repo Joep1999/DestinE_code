@@ -1446,16 +1446,6 @@ class StepsBlendingNowcaster:
             GAMMA = self.__custom_weights["GAMMA"]
         elif not self.__params.zero_precip_radar:
             # compute lag-l temporal auto-correlation coefficients for each cascade level
-            mask = ~np.isfinite(self.__state.precip_cascades)
-            n_replaced = np.sum(mask)
-
-            if n_replaced > 0:
-                print(
-                    f"Replacing {n_replaced} non-finite values in precip_cascades with 0."
-                )
-                indices = np.argwhere(mask)
-                print("Indices of replaced values:", indices)
-            self.__state.precip_cascades[mask] = 0
             for i in range(self.__config.n_cascade_levels):
                 GAMMA[i, :] = correlation.temporal_autocorrelation(
                     self.__state.precip_cascades[i], mask=self.__params.mask_threshold
