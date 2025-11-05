@@ -1142,7 +1142,7 @@ class StepsBlendingNowcaster:
                 mask=self.__params.mask_threshold,
                 fft_method=self.__params.fft,
                 output_domain=self.__config.domain,
-                normalize=True,
+                # normalize=True,
                 compute_stats=True,
                 compact_output=True,
             )
@@ -1683,7 +1683,7 @@ class StepsBlendingNowcaster:
                     input_domain=self.__config.domain,
                     output_domain=self.__config.domain,
                     compute_stats=True,
-                    normalize=True,
+                    # normalize=True,
                     compact_output=True,
                 )
                 self.__state.precip_mean_noise[j] = epsilon_decomposed["means"]
