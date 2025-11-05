@@ -563,6 +563,10 @@ n_ens_members = 5
 n_ens_members_dgmr = 5
 weights_method = "bps"
 
+n_trials = (30,)  # adjust to available time (e.g. 10–15 mins each)
+n_jobs = (1,)  # sequential, since runs are long
+timeout = (6 * 3600,)  # 6 hours max runtime
+
 blend_precip_total = []
 nowcast_precip_total = []
 nwp_precip_total = []
@@ -629,11 +633,11 @@ for yr in years:
                     re_do_blending=True,
                 )
 
-                blend_precip_clim_swp = np.moveaxis(blend_precip_clim, 0, 3)
+                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim, 0,3)
                 blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic, 0, 3)
-                blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0, 2)
+                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,2)
                 blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0, 2)
-                blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0, 1)
+                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,1)
                 blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0, 1)
                 radar_precip_swp = np.moveaxis(radar_precip, 0, 2)
 
@@ -769,7 +773,7 @@ for yr in years:
                 study_name = f"pysteps_blending_{date_str}"
 
                 # SQLite DB file (will be created automatically)
-                storage = f"sqlite:///optuna_blending_study.db"
+                storage = f"sqlite:///optuna_blending_study_{date_str}.db"
 
                 # Create or load the study
                 study = optuna.create_study(

@@ -37,7 +37,7 @@ from scipy.interpolate import griddata
 import requests
 import sys
 
-# sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
+sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
 
 
 import dgmr_for_blending
@@ -358,7 +358,7 @@ def download_radar_knmi(gauge_adjusted, last_hour, date, input_dir):
         url = "https://api.dataplatform.knmi.nl/open-data/datasets/radar_reflectivity_composites/versions/2.0/files"
         lastfile = last_hour.strftime("RAD_NL25_PCP_NA_%Y%m%d%H%M.h5")
 
-    api_key = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6ImVlNDFjMWI0MjlkODQ2MThiNWI4ZDViZDAyMTM2YTM3IiwiaCI6Im11cm11cjEyOCJ9"
+    api_key = "5e554e19274a9600012a3eb10174be35b75442a7a5e2ba066642a279"
 
     file_list = requests.get(
         url,
