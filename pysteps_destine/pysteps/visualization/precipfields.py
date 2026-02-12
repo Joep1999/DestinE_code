@@ -160,8 +160,10 @@ def plot_precip_field(
     x_grid, y_grid, extent, regular_grid, origin = get_geogrid(
         nlat, nlon, geodata=geodata
     )
-
+    
     ax = get_basemap_axis(extent, ax=ax, geodata=geodata, map_kwargs=map_kwargs)
+
+    # ax.set_axis_off()
 
     precip = np.ma.masked_invalid(precip)
 
@@ -178,7 +180,7 @@ def plot_precip_field(
     else:
         im = _plot_field(precip, ax, extent, cmap, norm, x_grid=x_grid, y_grid=y_grid)
 
-    plt.title(title)
+    plt.title(title, fontsize=30)
 
     # Add colorbar
     if colorbar:
@@ -204,6 +206,8 @@ def plot_precip_field(
         ax.xaxis.set_ticklabels([])
         ax.yaxis.set_ticks([])
         ax.yaxis.set_ticklabels([])
+        ax.set_axis_off()
+        
 
     if bbox is not None:
         ax.set_xlim(bbox[0], bbox[2])
@@ -225,6 +229,7 @@ def _plot_field(precip, ax, extent, cmap, norm, origin=None, x_grid=None, y_grid
             origin=origin,
             zorder=10,
         )
+        ax.set_axis_off()
     else:
         im = ax.pcolormesh(
             x_grid,
@@ -234,6 +239,8 @@ def _plot_field(precip, ax, extent, cmap, norm, origin=None, x_grid=None, y_grid
             norm=norm,
             zorder=10,
         )
+        ax.set_axis_off()
+        
 
     return im
 

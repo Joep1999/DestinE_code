@@ -449,8 +449,8 @@ def get_basemap_axis(extent, geodata=None, ax=None, map_kwargs=None):
             )
             return ax
 
-        if not isinstance(ax, GeoAxesSubplot):
-            # Check `ax` is not a GeoAxesSubplot axis to avoid overwriting the map.
-            ax = basemaps.plot_geography(geodata["projection"], extent, **map_kwargs)
+        #if not isinstance(ax, GeoAxesSubplot):
+        # Check `ax` is not a GeoAxesSubplot axis to avoid overwriting the map.
+        ax = basemaps.plot_geography(geodata["projection"], extent, **map_kwargs)
 
     return ax

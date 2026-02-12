@@ -1078,6 +1078,7 @@ class StepsBlendingNowcaster:
 
         # we need to know the zerovalue of precip to replace the mask when decomposing after
         # extrapolation
+        import numpy as np
         self.__params.nowcast_zerovalue = np.nanmin(self.__precip_nowcast)
         self.__params.precip_zerovalue = np.nanmin(self.__precip)
         # 1. Start with the radar rainfall fields. We want the fields in a Lagrangian
@@ -1142,7 +1143,7 @@ class StepsBlendingNowcaster:
                 mask=self.__params.mask_threshold,
                 fft_method=self.__params.fft,
                 output_domain=self.__config.domain,
-                # normalize=True,
+                normalize=True,
                 compute_stats=True,
                 compact_output=True,
             )
@@ -1153,6 +1154,40 @@ class StepsBlendingNowcaster:
         self.__state.precip_cascades = nowcast_utils.stack_cascades(
             precip_forecast_decomp, self.__config.n_cascade_levels
         )
+        import numpy as np
+        # temprary function to check for non-finite values in the input fields and print some information about them. This is to debug the issue of non-finite values in the nowcast decomposition.
+        # def inspect_and_clean_field(name, arr, c):
+        #     print(f"\n=== Checking field: {name} ===")
+        #     print("Shape:", arr.shape)
+        #     print("min before:", np.nanmin(arr))
+        #     print("max before:", np.nanmax(arr))
+
+        #     mask_nonfinite = ~np.isfinite(arr)
+
+        #     n_nan = np.isnan(arr).sum()
+        #     n_inf = np.isinf(arr).sum()
+        #     n_nonfinite = mask_nonfinite.sum()
+
+        #     print("NaNs:", n_nan)
+        #     print("Infs:", n_inf)
+        #     print("Non-finite total:", n_nonfinite)
+
+        #     if n_nonfinite > 0:
+        #         idx = np.argwhere(mask_nonfinite)
+        #         print("First 10 problematic indices:", idx[:10])
+
+        #         # --- CLEANING STEP ---
+        #         arr_clean = arr.copy()
+        #         arr_clean[mask_nonfinite] = self.__params.nowcast_zerovalue
+        #         print(f"→ Replaced {n_nonfinite} non-finite values with {self.__params.nowcast_zerovalue}.")
+
+        #         print("min after:", np.nanmin(arr_clean))
+        #         print("max after:", np.nanmax(arr_clean))
+        #         return arr_clean
+
+        #     print("No cleaning needed.")
+        #     return arr
+        # self.__state.precip_cascades = inspect_and_clean_field("cascades", self.__state.precip_cascades, self.__params.precip_zerovalue)
 
         precip_forecast_decomp = precip_forecast_decomp[-1]
         self.__state.mean_extrapolation = np.array(precip_forecast_decomp["means"])
@@ -1168,10 +1203,12 @@ class StepsBlendingNowcaster:
                         partial(self.__decompose_member),
                         list(self.__precip_nowcast),
                     )
-
+            
             self.__state.precip_nowcast_cascades = np.array(
                 [result["precip_nowcast_decomp"] for result in results]
             ).swapaxes(1, 2)
+            # self.__state.precip_nowcast_cascades = inspect_and_clean_field("cascades", self.__state.precip_nowcast_cascades, self.__params.nowcast_zerovalue)
+            
             self.__state.mean_nowcast = np.array(
                 [result["precip_nowcast_means"] for result in results]
             ).swapaxes(1, 2)
@@ -1447,6 +1484,8 @@ class StepsBlendingNowcaster:
         elif not self.__params.zero_precip_radar:
             # compute lag-l temporal auto-correlation coefficients for each cascade level
             for i in range(self.__config.n_cascade_levels):
+                
+                
                 GAMMA[i, :] = correlation.temporal_autocorrelation(
                     self.__state.precip_cascades[i], mask=self.__params.mask_threshold
                 )
@@ -1673,7 +1712,7 @@ class StepsBlendingNowcaster:
                     input_domain=self.__config.domain,
                     output_domain=self.__config.domain,
                     compute_stats=True,
-                    # normalize=True,
+                    normalize=True,
                     compact_output=True,
                 )
                 self.__state.precip_mean_noise[j] = epsilon_decomposed["means"]

@@ -13,125 +13,105 @@ import numpy.typing as npt
 import pandas as pd
 import time
 import sys
-
 sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
 import blending_operational
 import warnings
 import pyproj
 import scoringrules as sr
+from pathlib import Path
 
-# input /output directories
+#input /output directories
 gauge_adjusted = True
 if gauge_adjusted:
-    knmi_input_dir = "/srv/data/nas/input_general/knmi_radar_gauge_adj/"
+    knmi_input_dir = '/srv/data/nas/input_general/knmi_radar_gauge_adj/'
 else:
-    knmi_input_dir = "/srv/data/nas/input_general/knmi_radar/"
+    knmi_input_dir = '/srv/data/nas/input_general/knmi_radar/'
 
-destineE_datafolder = "/srv/data/nas/project_data/p111_ecmwf_destine/"
+destineE_datafolder = '/srv/data/nas/project_data/p111_ecmwf_destine/'
 
 
-def download_radar_knmi_check(
-    gauge_adjusted, start_date, input_dir, time_interval, timesteps
-):
+def download_radar_knmi_check(gauge_adjusted,start_date, input_dir, time_interval, timesteps):
     before_start_date = start_date + timedelta(minutes=-10)
     if gauge_adjusted:
-        url = "https://api.dataplatform.knmi.nl/open-data/v1/datasets/nl_rdr_data_rtcor_5m/versions/1.0/files"
-        startfile = before_start_date.strftime("RAD_NL25_RAC_RT_%Y%m%d%H%M.h5")
+        url = 'https://api.dataplatform.knmi.nl/open-data/v1/datasets/nl_rdr_data_rtcor_5m/versions/1.0/files'
+        startfile = before_start_date.strftime('RAD_NL25_RAC_RT_%Y%m%d%H%M.h5')
     else:
-        url = "https://api.dataplatform.knmi.nl/open-data/datasets/radar_reflectivity_composites/versions/2.0/files"
-        startfile = before_start_date.strftime("RAD_NL25_PCP_NA_%Y%m%d%H00.h5")
+        url = 'https://api.dataplatform.knmi.nl/open-data/datasets/radar_reflectivity_composites/versions/2.0/files'
+        startfile = before_start_date.strftime('RAD_NL25_PCP_NA_%Y%m%d%H00.h5')
 
-    api_key = "5e554e19274a9600012a3eb10174be35b75442a7a5e2ba066642a279"
+
+    api_key = '5e554e19274a9600012a3eb10174be35b75442a7a5e2ba066642a279'
 
     interval_factor = time_interval // 5
 
-    file_list = requests.get(
-        url,
-        headers={"Authorization": api_key},
-        params={
-            "startAfterFilename": startfile,
-            "maxKeys": int(interval_factor * (timesteps + 1)),
-        },
-    )  # add a buffer of 1 to be sure to have all the files, correct files are selected later
+    file_list = requests.get(url, headers={'Authorization': api_key},
+                            params={"startAfterFilename": startfile,
+                                    "maxKeys": int(interval_factor * (timesteps+1))}) #add a buffer of 1 to be sure to have all the files, correct files are selected later
 
-    file_list = file_list.json().get("files")
+    file_list = file_list.json().get('files')
 
     # Parse timestamps from filenames
     def extract_datetime(filename):
         # Extract the 14-digit timestamp from the filename
-        date_str = filename.split("_")[-1].split(".")[0]
+        date_str = filename.split('_')[-1].split('.')[0]
         return datetime.strptime(date_str, "%Y%m%d%H%M")
 
     # Find the index of the dictionary with that timestamp
     index_start = next(
-        (
-            i
-            for i, d in enumerate(file_list)
-            if extract_datetime(d["filename"]) == start_date
-        ),
-        None,  # returns None if not found
+        (i for i, d in enumerate(file_list) if extract_datetime(d['filename']) == start_date),
+        None  # returns None if not found
     )
-
-    end_date = start_date + timedelta(minutes=timesteps * time_interval)
-    print("last timestep is: ", end_date)
+    
+    end_date = start_date+ timedelta(minutes = timesteps * time_interval)
+    print('last timestep is: ',end_date)
 
     # Find the index of the dictionary with that timestamp
     index_end = next(
-        (
-            i
-            for i, d in enumerate(file_list)
-            if extract_datetime(d["filename"]) == end_date
-        ),
-        None,  # returns None if not found
+        (i for i, d in enumerate(file_list) if extract_datetime(d['filename']) == end_date),
+        None  # returns None if not found
     )
 
-    file_list = file_list[index_start : index_end + 1]
+    file_list = file_list[index_start:index_end+1]
+
 
     # Download the last 3 available files
     for ii in range(len(file_list)):
-        fn = file_list[ii]["filename"]
-        print("Downloading: ", fn)
-
+        fn = file_list[ii]['filename']
+        print('Downloading: ', fn)
+        
         yr = fn[16:20]
         mnth = fn[20:22]
         day = fn[22:24]
         hour = fn[24:26]
         minute = fn[26:28]
-
-        local_folder_today = input_dir + "/{}/{}/{}/".format(yr, mnth, day)
+        
+        local_folder_today = input_dir + '/{}/{}/{}/'.format(yr,mnth,day)
 
         for folder in [local_folder_today]:
             if not os.path.exists(folder):
                 os.makedirs(folder)
 
+        
         direc = local_folder_today
-
-        if not os.path.exists(direc + fn):
-
-            get_file_response = requests.get(
-                url + "/" + fn + "/url", headers={"Authorization": api_key}
-            )
-
+        
+        if not os.path.exists(direc+fn):
+        
+        
+            get_file_response = requests.get(url+'/'+fn+'/url', headers={'Authorization': api_key})
+            
             download_url = get_file_response.json().get("temporaryDownloadUrl")
-
+            
             dataset_file = requests.get(download_url, stream=True)
-
+        
             if dataset_file.status_code == 200:
-                with open(direc + fn, "wb") as f:
+                with open(direc+fn, 'wb') as f:
                     dataset_file.raw.decode_content = True
                     shutil.copyfileobj(dataset_file.raw, f)
-
+    
     fns = io.find_by_date(
-        start_date,
-        input_dir,
-        "%Y/%m/%d",
-        "RAD_NL25_RAC_RT_%Y%m%d%H%M",
-        "h5",
-        time_interval,
-        num_next_files=timesteps,
+        start_date, input_dir, "%Y/%m/%d", "RAD_NL25_RAC_RT_%Y%m%d%H%M", "h5", time_interval, num_next_files=timesteps
     )
     return fns
-
 
 def cf_parameters_from_unit(unit: str) -> tuple[str, dict[str, str | None]]:
     if unit == "mm/h":
@@ -157,7 +137,6 @@ def cf_parameters_from_unit(unit: str) -> tuple[str, dict[str, str | None]]:
         "long_name": var_long_name,
         "units": var_unit,
     }
-
 
 def _convert_proj4_to_grid_mapping(proj4str):
     tokens = proj4str.split("+")
@@ -209,7 +188,6 @@ def compute_lat_lon(
     pr = pyproj.Proj(projection)
     lon, lat = pr(x_2d.flatten(), y_2d.flatten(), inverse=True)
     return lat.reshape(x_2d.shape), lon.reshape(x_2d.shape)
-
 
 def convert_input_to_xarray_dataset(
     precip: np.ndarray,
@@ -304,7 +282,7 @@ def convert_input_to_xarray_dataset(
     # flip yr vector if yorigin is upper
     if metadata["yorigin"] == "upper":
         # y_r = np.flip(y_r)
-        b = 1
+        b=1
 
     lat, lon = compute_lat_lon(x_r, y_r, metadata["projection"])
 
@@ -435,22 +413,9 @@ import numpy as np
 from pysteps.verification import probscores, spatialscores
 
 
-def skill_score(
-    date,
-    histrorical_destine,
-    knmi_input_dir,
-    destineE_datafolder,
-    timesteps,
-    timestep_interval,
-    n_ens_members,
-    n_ens_members_dgmr,
-    weights_method,
-    custom_weights=None,
-    return_weights=True,
-    re_do_blending=True,
-):
+def skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method, custom_weights=None, return_weights = True, re_do_blending  =True, multi_model = True, noise = True, probmatching = True): 
 
-    # check if radar images exist
+    #check if radar images exist
     gauge_adjusted = True
 
     # def round_to_5min(dt):
@@ -466,28 +431,22 @@ def skill_score(
     try:
         if gauge_adjusted:
             fns = io.find_by_date(
-                date,
-                knmi_input_dir,
-                "%Y/%m/%d",
-                "RAD_NL25_RAC_RT_%Y%m%d%H%M",
-                "h5",
-                timestep_interval,
-                num_next_files=timesteps,
+                date, knmi_input_dir, "%Y/%m/%d", "RAD_NL25_RAC_RT_%Y%m%d%H%M", "h5", timestep_interval, num_next_files=timesteps
             )
+            assert len(fns[0]) >= timesteps, f'fns does not contain enough radar images for DGMR (needs {timesteps}, contains {len(fns[0])})'
+            assert not None in fns[0]
         else:
             fns = io.find_by_date(
-                date,
-                knmi_input_dir,
-                "%Y/%m/%d",
-                "RAD_NL25_PCP_NA_%Y%m%d%H%M",
-                "h5",
-                timestep_interval,
-                num_next_files=timesteps,
+                date, knmi_input_dir, "%Y/%m/%d", "RAD_NL25_PCP_NA_%Y%m%d%H%M", "h5", timestep_interval, num_next_files=timesteps
             )
+            assert len(fns[0]) >= timesteps, f'fns does not contain enough radar images for DGMR (needs {timesteps}, contains {len(fns[0])})'
+            assert not None in fns[0]
+        if None in fns:
+            raise AssertionError("(Part of Radar files not found.")
     except:
-        fns = download_radar_knmi_check(
-            gauge_adjusted, date, knmi_input_dir, timestep_interval, timesteps
-        )
+        fns = download_radar_knmi_check(gauge_adjusted,date, knmi_input_dir, timestep_interval, timesteps)
+        assert len(fns[0]) >= timesteps, f'fns does not contain enough radar images for DGMR (needs {timesteps}, contains {len(fns[0])})'
+        assert not None in fns[0]
 
     # load Radar files
     importer_kwargs = {"accutime": 5, "qty": "ACRR", "pixelsize": 1000.0}
@@ -497,337 +456,362 @@ def skill_score(
         importer = io.get_method("knmi_hdf5", "importer")
         R, _, metadata_radar = io.read_timeseries(fns, importer, **importer_kwargs)
     except:
-        print("Input data unreadable. Abort script.")
+        print('Input data unreadable. Abort script.')
 
-    # Convert to rain rate
+    #Convert to rain rate
     R, metadata_radar = conversion.to_rainrate(R, metadata_radar)
-    del metadata_radar["transform"]
+    del metadata_radar['transform']
     R[np.isnan(R)] = 0
 
     import warnings
     import pyproj
+    R_xr = convert_input_to_xarray_dataset(R,None,metadata_radar,fns[1][0], timestep_interval * 60)
 
-    R_xr = convert_input_to_xarray_dataset(
-        R, None, metadata_radar, fns[1][0], timestep_interval * 60
-    )
+    #This code can be used to check if there is enough rain in the radar field to run the optimisation
+    # run_optimise = False
+    # for t in range(len(R_xr)):
+    #         radar_image = R[t, :,:]
+    #         wet_area = (radar_image > 3).sum()
+    #         wet_area_high = (radar_image > 10).sum()
+    #         # print(radar_image.max())
+    #         # print(wet_area_high)
+    #         if wet_area > 1300:
+    #             run_optimise = True
+    #             print(wet_area)
+    #         elif wet_area_high > 32:
+    #             print(wet_area_high)
+    #             run_optimise = True
+    # return run_optimise
+    # if run_optimise == True:
+   
+    #Fix it so pre-processing does not always have to happen.
+    
+    
+    blend_precip, nowcast_precip, nwp_precip, weights = blending_operational.run_blending_operational(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method=weights_method, custom_weights=custom_weights, return_weights = return_weights, re_do_blending  =re_do_blending, multi_model = True, noise = noise, probmatching = probmatching)
+    return blend_precip, nowcast_precip, nwp_precip, R_xr.precip_intensity.values[:-1], weights
 
-    # TODO run this
-
-    # Fix it so pre-processing does not always have to happen.
-    blend_precip, nowcast_precip, nwp_precip, weights = (
-        blending_operational.run_blending_operational(
-            date,
-            histrorical_destine,
-            knmi_input_dir,
-            destineE_datafolder,
-            timesteps,
-            timestep_interval,
-            n_ens_members,
-            n_ens_members_dgmr,
-            weights_method=weights_method,
-            custom_weights=custom_weights,
-            return_weights=return_weights,
-            re_do_blending=re_do_blending,
-        )
-    )
-
-    return (
-        blend_precip,
-        nowcast_precip,
-        nwp_precip,
-        R_xr.precip_intensity.values[:-1],
-        weights,
-    )
+        # print(f' It fkn crashed again... LIKELY NO OR LITTLE RAIN IN THE RADAR FIELD. Max rain in field: {R_xr.precip_intensity.values[:-1].max()} SKIPPING DATE: ', date_str) 
+    # else:
+    #     print('Skipping date due to insufficient rain in radar field: ', date)
 
 
-# for full dataset
+#for full dataset
 # years = [2023,2024,2025]
 # months = np.arange(1,13,1)
 # days = np.arange(1,32,1)
 # hours = [6,12,18, 24, 30]
 
-# for single case:
-years = [2024]
-months = [5]
-days = [1]  # np.arange(1,32)
-hours = [17]
+#[15,[6,9,11]], [3,[7,9,11]], [12,[11]], [14,[11]],
+#[3,[7,9,11]], [12,[11]], [14,[11]],16,[6] [15,[6,9,11]], #TODO for the 15th, getting problem that IFS is ranging from 6:05 - 18:30 instead of 6-18...
+#for single case: 
 
-# IF using data downloaded from ATOS, use TRUE
+#[16,[9,11]]
+years = [2024]
+months = [8,9,10,11,12]
+#days = [ [25,[6,11]], [28,[11]]]
+#[4,6,24,26,27]  # 6,26,27 np.arange(1,32)
+# hours = [5]
+
+
+#IF using data downloaded from ATOS, use TRUE
 historical_destine = True
 
-# Model settings -> currently only works for hour = 6 becasue of DGMR
-hour_length = 6
-timestep_interval = 20
-timesteps = int(hour_length * (60 / timestep_interval))
-n_ens_members = 5
+#Model settings -> currently only works for hour = 6 becasue of DGMR
+hour_length = 12
+timestep_interval = 30
+timesteps = int(hour_length * (60/timestep_interval))
+n_ens_members = 20
 n_ens_members_dgmr = 5
-weights_method = "bps"
+weights_method = 'bps'
 
-n_trials = (30,)  # adjust to available time (e.g. 10–15 mins each)
-n_jobs = (1,)  # sequential, since runs are long
-timeout = (6 * 3600,)  # 6 hours max runtime
+n_trials=30,           # adjust to available time (e.g. 10–15 mins each)
+n_jobs=1,              # sequential, since runs are long
+timeout=6 * 3600,       # 6 hours max runtime
 
 blend_precip_total = []
 nowcast_precip_total = []
 nwp_precip_total = []
 radar_data = []
+
+BASE = Path("/srv/data/nas/project_data/p111_ecmwf_destine")
 for yr in years:
     for mnth in months:
-        for dy in days:
-            for hr in hours:
+        days = os.listdir( BASE / "IFS" / str(yr) / str(mnth).zfill(2)/ 'original')
+        for day in days:
+            # for hr in hours:
+            if not day.endswith('.grib'):
+                print('File is not a grib file, skipping file: ', day)
+                continue
+            date = datetime.strptime(day,'IFS_%Y%m%d%H_228.128.grib') + timedelta(hours=5)
 
-                date = datetime(yr, mnth, dy, hr)
-                date_str = date.strftime("%Y%m%d%H")
-                # ============================================================
-                # 1️⃣ Base parameters (climatological and dynamic)
-                # ============================================================
+            
+            #date = datetime(yr, mnth,dy,hr)
+            date_str = date.strftime('%Y%m%d%H')
+            if date_str in [date[-10:] for date in optuna.study.get_all_study_names(storage=f"sqlite:///optuna_blending_study.db")]:
+                print('Study for this date already exists, skipping date: ', date_str)
+                continue
+            # ============================================================
+            # 1️⃣ Base parameters (climatological and dynamic)
+            # ============================================================
 
-                GAMMA_base = np.array(
-                    [
-                        [0.99805, 0.9933],
-                        [0.9925, 0.923],
-                        [0.9776, 0.975],
-                        [0.9297, 0.750],
-                        [0.796, 0.367],
-                        [0.482, 0.069],
-                    ]
-                )
+            GAMMA_base = np.array([
+                [0.99805, 0.9933],
+                [0.9925,  0.9752],
+                [0.9776, 0.923],
+                [0.9297,  0.750],
+                [0.796,   0.367],
+                [0.482,   0.069],
+            ])
 
-                regr_pars_base = np.array(
-                    [
-                        [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
-                        [155.0, 220.0, 200.0, 75.0, 1e4, 1e4],
-                    ]
-                )
+            regr_pars_base = np.array([
+                [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
+                [155.0, 220.0, 200.0, 75.0, 1e5,  1e5],
+            ])
 
-                clim_cor_values_base = np.array(
-                    [0.848, 0.537, 0.237, 0.065, 0.02, 0.0044]
-                )
+            clim_cor_values_base = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+            
+            custom_weights = {
+                "GAMMA": GAMMA_base,
+                "regr_pars": regr_pars_base,
+                "clim_cor_values": clim_cor_values_base,
+            }
+            re_do_blending = True
 
-                custom_weights = {
-                    "GAMMA": GAMMA_base,
-                    "regr_pars": regr_pars_base,
-                    "clim_cor_values": clim_cor_values_base,
-                }
+            #code can be used to chack on which dates there is enough rain in the radar field to run the optimisation
+            # run = skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method = 'custom', custom_weights = custom_weights, return_weights = True, re_do_blending  =True)
+            # if run == True:
+            #     radar_data.append(date_str)
 
-                # Run model twice (climatological and dynamic)
-                # blend_precip_clim, nowcast_precip, nwp_precip, radar_precip, weights_clim = skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method = 'custom', custom_weights = custom_weights, return_weights = True, re_do_blending  =True)
-                (
-                    blend_precip_dynamic,
-                    nowcast_precip,
-                    nwp_precip,
-                    radar_precip,
-                    weights_dynamic,
-                ) = skill_score(
-                    date,
-                    historical_destine,
-                    knmi_input_dir,
-                    destineE_datafolder,
-                    timesteps,
-                    timestep_interval,
-                    n_ens_members,
-                    n_ens_members_dgmr,
-                    weights_method="bps",
-                    custom_weights=None,
-                    return_weights=True,
-                    re_do_blending=True,
-                )
 
-                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim, 0,3)
-                blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic, 0, 3)
-                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,2)
-                blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0, 2)
-                # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,1)
-                blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0, 1)
-                radar_precip_swp = np.moveaxis(radar_precip, 0, 2)
 
-                # calculate CRPS for both
-                # crps_clim = sr.crps_ensemble(radar_precip_swp, blend_precip_clim_swp)
-                # crps_dynamic = sr.crps_ensemble(radar_precip_swp, blend_precip_dynamic_swp)
 
-                # Example dynamic values (replace with your real second run)
+            # Run model twice (climatological and dynamic)
+            # blend_precip_clim, nowcast_precip, nwp_precip, radar_precip, weights_clim = skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method = 'custom', custom_weights = custom_weights, return_weights = True, re_do_blending  =True)
+            
+
+
+            try:
+                blend_precip_dynamic, nowcast_precip, nwp_precip, radar_precip, weights_dynamic = skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method = 'bps', custom_weights = None, return_weights = True, re_do_blending  =False, multi_model = True, noise = True, probmatching = True)
+            except:
+                print('something went wrong in calculating the dynamic weights')
+                continue
+
+            # blend_precip_clim_swp = np.moveaxis(blend_precip_clim, 0,3)
+            blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic, 0,3)
+            # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,2)
+            blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0,2)
+            # blend_precip_clim_swp = np.moveaxis(blend_precip_clim_swp, 0,1)
+            blend_precip_dynamic_swp = np.moveaxis(blend_precip_dynamic_swp, 0,1)
+            radar_precip_swp = np.moveaxis(radar_precip, 0,2)
+
+            #calculate CRPS for both
+            # crps_clim = sr.crps_ensemble(radar_precip_swp, blend_precip_clim_swp)
+            # crps_dynamic = sr.crps_ensemble(radar_precip_swp, blend_precip_dynamic_swp)
+
+            # Example dynamic values (replace with your real second run)
+            try:
+                GAMMA_dynamic = weights_dynamic.item()["GAMMA"]
+                regr_pars_dynamic = weights_dynamic.item()["regr_pars"]
+                clim_cor_values_dynamic = weights_dynamic.item()["clim_cor"]
+            except:
                 GAMMA_dynamic = weights_dynamic["GAMMA"]
                 regr_pars_dynamic = weights_dynamic["regr_pars"]
                 clim_cor_values_dynamic = weights_dynamic["clim_cor"]
 
-                GAMMA_dynamic = np.array(
-                    [
-                        [0.99477983, 0.98303498],
-                        [0.94658293, 0.84849088],
-                        [0.75459812, 0.53982899],
-                        [0.35159685, 0.13695139],
-                        [0.16055702, 0.13328882],
-                        [0.13879112, 0.15488655],
-                    ]
-                )
-                clim_cor_values_dynamic = np.array(
-                    [0.848, 0.537, 0.237, 0.065, 0.02, 0.0044]
-                )
-                regr_pars_dynamic = np.array(
-                    [
-                        [1.30e02, 1.65e02, 1.20e02, 5.50e01, 5.00e01, 1.50e01],
-                        [1.55e02, 2.20e02, 2.00e02, 7.50e01, 1.00e05, 1.00e05],
-                    ]
-                )
 
-                # ============================================================
-                # 2️⃣ Helper to create sampling bounds
-                # ============================================================
-                def make_range(base, dynamic):
+
+
+
+            # ============================================================
+            # 2️⃣ Helper to create sampling bounds
+            # ============================================================
+            def make_range(base, dynamic):
+                if base.all() == dynamic.all():
+                    lower = base - 0.5 
+                    upper = base + 0.5     
+                else:
                     diff = np.abs(dynamic - base)
                     lower = np.minimum(base, dynamic) - 1 * diff
                     upper = np.maximum(base, dynamic) + 1 * diff
-                    return np.clip(lower, 0, 1), np.clip(upper, 0, 1)
+                return np.clip(lower, 0, 1), np.clip(upper, 0, 1)
 
-                # ============================================================
-                # 3️⃣ Objective function (Optuna trial)
-                # ============================================================
-                def objective(trial):
-                    # --- Sample GAMMA (monotonic decreasing constraint)
-                    GAMMA = np.zeros_like(GAMMA_base)
-                    for j in range(2):
-                        lower, upper = make_range(GAMMA_base[:, j], GAMMA_dynamic[:, j])
-                        prev_val = 1.0
-                        for i in range(6):
-                            val = trial.suggest_float(
-                                f"GAMMA_{i}_{j}", lower[i], upper[i]
-                            )
-                            val = min(val, prev_val)  # enforce decreasing
-                            GAMMA[i, j] = val
-                            prev_val = val
+            def make_range_regr_pars(base, dynamic):
+                if base.all() == dynamic.all():
+                    lower = base - 0.3 * base
+                    upper = base + 0.3 * base      
+                else:
+                    diff = np.abs(dynamic - base)
+                    lower = np.minimum(base, dynamic) - 1 * diff
+                    upper = np.maximum(base, dynamic) + 1 * diff
+                return lower, upper
 
-                    # --- Sample regr_pars (no monotonic constraint)
-                    regr_pars = np.zeros_like(regr_pars_base)
-                    for j in range(2):
-                        lower, upper = make_range(
-                            regr_pars_base[j, :], regr_pars_dynamic[j, :]
-                        )
-                        for i in range(6):
-                            regr_pars[j, i] = trial.suggest_float(
-                                f"regr_{j}_{i}", lower[i], upper[i]
-                            )
-
-                    # --- Sample clim_cor_values (decreasing constraint)
-                    lower, upper = make_range(
-                        clim_cor_values_base, clim_cor_values_dynamic
-                    )
-                    clim_cor_values = np.zeros_like(clim_cor_values_base)
+            # ============================================================
+            # 3️⃣ Objective function (Optuna trial)
+            # ============================================================
+            
+            def objective(trial):
+                # --- Sample GAMMA (monotonic decreasing constraint)
+                GAMMA = np.zeros_like(GAMMA_base)
+                for j in range(2):
+                    lower, upper = make_range(GAMMA_base[:, j], GAMMA_dynamic[:, j])
                     prev_val = 1.0
-                    for i in range(6):
-                        val = trial.suggest_float(f"clim_{i}", lower[i], upper[i])
-                        val = min(val, prev_val)
-                        clim_cor_values[i] = val
+                    # for i in range(6):
+                    #for i in range(4):
+                    for i in range(2):
+                        val = trial.suggest_float(f"GAMMA_{i}_{j}", lower[i], upper[i])
+                        val = min(val, prev_val)  # enforce decreasing
+                        GAMMA[i, j] = val
                         prev_val = val
 
-                    # --- Prepare parameter dictionary
-                    custom_weights = {
-                        "GAMMA": GAMMA,
-                        "regr_pars": regr_pars,
-                        "clim_cor_values": clim_cor_values,
+                # --- Sample regr_pars
+                regr_pars = np.zeros_like(regr_pars_base)
+                for j in range(2):
+                    lower, upper = make_range_regr_pars(regr_pars_base[j, :], regr_pars_dynamic[j, :])
+                    for i in range(2):
+                        regr_pars[j, i] = trial.suggest_float(f"regr_{j}_{i}", lower[i], upper[i])
+                
+                
+                use_noise = trial.suggest_categorical("use_noise", [True, False])
+                use_probmatching = trial.suggest_categorical("use_probmatching", [True, False])
+                #--- Sample clim_cor_values (decreasing constraint)
+                # lower, upper = make_range(clim_cor_values_base, clim_cor_values_dynamic)
+                # clim_cor_values = np.zeros_like(clim_cor_values_base)
+                # prev_val = 1.0
+                # for i in range(4):
+                #     val = trial.suggest_float(f"clim_{i}", lower[i], upper[i])
+                #     val = min(val, prev_val)
+                #     clim_cor_values[i] = val
+                #     prev_val = val
+
+                #--- Prepare parameter dictionary
+                # custom_weights = {
+                #     "GAMMA": GAMMA,
+                #     "regr_pars": regr_pars,
+                #     "clim_cor_values": clim_cor_values,
+                # }
+                custom_weights = {
+                        "GAMMA":np.vstack([ GAMMA[:-4], GAMMA_base[-4:]]) ,
+                        "regr_pars": np.hstack([regr_pars[:,:-4], regr_pars_base[:,-4:]]),
+                        "clim_cor_values": clim_cor_values_base,
                     }
+                
+                # ========================================================
+                #  Run your blending model here
+                # ========================================================
+                #
+                # Example:
+                # crps_score = run_blending_and_compute_CRPS(custom_weights)
+                blend_precip_optuna, nowcast_precip, nwp_precip, radar_precip, weights_optuna = skill_score(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method = 'custom', custom_weights = custom_weights, return_weights = True, re_do_blending  =True, multi_model = True, noise = use_noise, probmatching = use_probmatching)
+                
+                blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna, 0,3)
+                blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna_swp, 0,2)
+                # blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna_swp, 0,1)
+                radar_precip_swp = np.moveaxis(radar_precip, 0,2)
+                
+                crps_score = sr.crps_ensemble(radar_precip_swp, blend_precip_optuna_swp)
+                crps_scre_mean = np.nanmean(crps_score)
 
-                    # ========================================================
-                    #  Run your blending model here
-                    # ========================================================
-                    #
-                    # Example:
-                    # crps_score = run_blending_and_compute_CRPS(custom_weights)
-                    (
-                        blend_precip_optuna,
-                        nowcast_precip,
-                        nwp_precip,
-                        radar_precip,
-                        weights_optuna,
-                    ) = skill_score(
-                        date,
-                        historical_destine,
-                        knmi_input_dir,
-                        destineE_datafolder,
-                        timesteps,
-                        timestep_interval,
-                        n_ens_members,
-                        n_ens_members_dgmr,
-                        weights_method="bps",
-                        custom_weights=custom_weights,
-                        return_weights=True,
-                        re_do_blending=True,
-                    )
+                return crps_score_mean  # CRPS → minimize
 
-                    blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna, 0, 3)
-                    blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna_swp, 0, 2)
-                    blend_precip_optuna_swp = np.moveaxis(blend_precip_optuna_swp, 0, 1)
-                    radar_precip_swp = np.moveaxis(radar_precip, 0, 2)
 
-                    crps_score = sr.crps_ensemble(
-                        radar_precip_swp, blend_precip_optuna_swp
-                    )
-                    crps_score_mean = np.nanmean(crps_score)
+            # ============================================================
+            # 4️⃣ Study setup with persistent SQLite storage
+            # ============================================================
 
-                    return crps_score_mean  # CRPS → minimize
+            # Create timestamped study name
+            
+            
+            study_name = f"pysteps_blending_{date_str}"
 
-                # ============================================================
-                # 4️⃣ Study setup with persistent SQLite storage
-                # ============================================================
+            # SQLite DB file (will be created automatically)
+            storage = f"sqlite:///optuna_blending_study.db"
+            # optuna-dashboard sqlite:///optuna_blending_study.db
 
-                # Create timestamped study name
-                study_name = f"pysteps_blending_{date_str}"
 
-                # SQLite DB file (will be created automatically)
-                storage = f"sqlite:///optuna_blending_study_{date_str}.db"
+            # Create or load the study
+            study = optuna.create_study(
+                study_name=study_name,
+                storage=storage,
+                direction="minimize",
+                load_if_exists=True,
+            )
 
-                # Create or load the study
-                study = optuna.create_study(
-                    study_name=study_name,
-                    storage=storage,
-                    direction="minimize",
-                    load_if_exists=True,
-                )
+            # ============================================================
+            # 5️⃣ Warm-start the study with two baseline trials
+            # ============================================================
+            def flatten_params(GAMMA, regr_pars, noise, probmatch):#,clim_cor_values
+                params = {}
+                for j in range(2):
+                    for i in range(4):
+                        params[f"GAMMA_{i}_{j}"] = float(GAMMA[i, j])
+                for j in range(2):
+                    for i in range(4):
+                        params[f"regr_{j}_{i}"] = float(regr_pars[j, i])
+                # for i in range(4):
+                #     params[f"clim_{i}"] = float(clim_cor_values[i])
+                params["use_noise"] = noise
+                params["use_probmatching"] = probmatch
+                return params
+            # Flatten the parameter sets
+            # climatological_params = flatten_params(GAMMA_base, regr_pars_base, clim_cor_values_base)
+            # operational_params = flatten_params(GAMMA_dynamic, regr_pars_dynamic, clim_cor_values_dynamic)
+            
+            noise_base = True
+            probmatch_base = True
+            probmatch_false = False
+            #TODO here is likely where it goes wrong and I get the linalg error -> try to find out why
+            climatological_params = flatten_params(GAMMA_base, regr_pars_base, noise_base, probmatch_base)
+            operational_params = flatten_params(GAMMA_dynamic, regr_pars_dynamic, noise_base, probmatch_base)
+            operational_params_false_prob = flatten_params(GAMMA_dynamic, regr_pars_dynamic, noise_base, probmatch_false)
 
-                # ============================================================
-                # 5️⃣ Warm-start the study with two baseline trials
-                # ============================================================
-                def flatten_params(GAMMA, regr_pars, clim_cor_values):
-                    params = {}
-                    for j in range(2):
-                        for i in range(6):
-                            params[f"GAMMA_{i}_{j}"] = float(GAMMA[i, j])
-                    for j in range(2):
-                        for i in range(6):
-                            params[f"regr_{j}_{i}"] = float(regr_pars[j, i])
-                    for i in range(6):
-                        params[f"clim_{i}"] = float(clim_cor_values[i])
-                    return params
 
-                # Flatten the parameter sets
-                climatological_params = flatten_params(
-                    GAMMA_base, regr_pars_base, clim_cor_values_base
-                )
-                operational_params = flatten_params(
-                    GAMMA_dynamic, regr_pars_dynamic, clim_cor_values_dynamic
-                )
+            # Add them to the queue (these will be the first two runs)
+            study.enqueue_trial(climatological_params)
+            study.enqueue_trial(operational_params)
+            study.enqueue_trial(operational_params_false_prob)
 
-                # Add them to the queue (these will be the first two runs)
-                study.enqueue_trial(climatological_params)
-                study.enqueue_trial(operational_params)
+            print("🧊 Enqueued climatological and operational baseline runs.")
 
-                print("🧊 Enqueued climatological and operational baseline runs.")
+            # ============================================================
+            # 6️⃣ Run the optimization
+            # ============================================================
+            print(f"🚀 Starting optimization for study: {study_name}")
+            study.optimize(
+                objective,
+                n_trials=13,           # adjust to available time (e.g. 10–15 mins each)
+                n_jobs=1,         o     # sequential, since runs are long
+                timeout=6 * 3600,     # 6 hours max runtime
+            )
 
-                # ============================================================
-                # 6️⃣ Run the optimization
-                # ============================================================
-                print(f"🚀 Starting optimization for study: {study_name}")
-                study.optimize(
-                    objective,
-                    n_trials=30,  # adjust to available time (e.g. 10–15 mins each)
-                    n_jobs=1,  # sequential, since runs are long
-                    timeout=6 * 3600,  # 6 hours max runtime
-                )
+            # ============================================================
+            #  Save and summarize results
+            # ============================================================
+            print("✅ Optimization complete.")
+            print(f"Best CRPS: {study.best_value:.4f}")
+            print("Best parameters:")
 
-                # ============================================================
-                #  Save and summarize results
-                # ============================================================
-                print("✅ Optimization complete.")
-                print(f"Best CRPS: {study.best_value:.4f}")
-                print("Best parameters:")
-                for key, val in study.best_trial.params.items():
-                    print(f"  {key}: {val}")
+            best_values = {}
+
+            for key, val in study.best_trial.params.items():
+                print(key)
+                print(val)
+                # key looks like 'GAMMA_0_1', 'regr_pars_1_2', etc.
+                parts = key.split("_")
+                name = parts[0]
+                
+                if name == 'use':
+                    best_values['use_'+ parts[1]] = {}
+                    best_values['use_' + parts[1]] = val
+                else:
+                    if name not in best_values:
+                        best_values[name] = {}
+                    # handle GAMMA_i_j etc
+                    indices = tuple(map(int, parts[1:]))  # (i, j)
+                    best_values[name][indices] = val
+
+            best_values['CRPS_best'] = study.best_value
+            best_values['CRPS_unoptimised'] = study.trials[1].value
+            best_values['weights_steps_dynamic'] = weights_dynamic
+            np.save(destineE_datafolder + f"optimal_parameters/best_values_{study_name}.npy", best_values)
+
+            # Put something here so the values are saved somewhere, + save the CRPS score + final blend data?
