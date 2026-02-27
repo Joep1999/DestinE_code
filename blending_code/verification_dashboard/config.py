@@ -11,9 +11,11 @@ DATASETS = {
     "destine_ifs": ["IFS and DestinE multi-model ensemble", "y-"],
     "nowcast": ["Nowcast ensemble", "g-"],
     "blend_ifs": ["Blend (IFS)","c-"],
-    "blend_ifs_noise": ["Blend (IFS noise)","m-"],
+    "blend_ifs_noise": ["Blend with weights determined by pySTEPS","m-"],
     'blend_optimised': ["Blend with optimised weights", "darkorange"],
-    'blend_optimised_upper_cascade': ["Blend with optimised weightsfor upper cascades", "brown"],
+    'blend_optimised_upper_cascade': ["Blend with optimised weights for upper cascades", "brown"],
+    'blend_optimised_kmeans_estimation': ["Blend with optimised weights estimated with k-means", "brown"],
+    'blend_optimised_machine_learning_prediciton':  ["Blend with weights estimated with machine learning", "r-"],
     'pysteps_nowcast': ["PySTEPS Nowcast", "blue"]
 }
 

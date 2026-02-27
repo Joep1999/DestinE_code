@@ -17,6 +17,22 @@ import sys
 sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
 import blending_operational
 
+GAMMA_base = np.array([
+                    [0.99805, 0.9933],
+                    [0.9925,  0.9752],
+                    [0.9776, 0.923],
+                    [0.9297,  0.750],
+                    [0.796,   0.367],
+                    [0.482,   0.069],
+                ])
+
+regr_pars_base = np.array([
+        [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
+        [155.0, 220.0, 200.0, 75.0, 1e5,  1e5],
+    ])
+
+clim_cor_values_base = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+
 
 def blend_path(year, month, date_str, variant, timestep_interval, timesteps):
     folder = BASE / "blended_forecast" / str(year) / str(month)
@@ -26,7 +42,10 @@ def blend_path(year, month, date_str, variant, timestep_interval, timesteps):
         study_name = f"pysteps_blending_{date_str}"
         storage_weights = f'sqlite:///optuna_blending_study.db'
         settings_best_blend = load_settings_weights_blending(study_name = study_name, storage = storage_weights)
-        noise = settings_best_blend['use_noise']
+        try:
+            noise = settings_best_blend['use_noise']
+        except:
+            noise=True
         probmatching = settings_best_blend['use_probmatching']
         suffix = DATASET_TO_VARIANT[variant]
 
@@ -46,7 +65,7 @@ def blend_path(year, month, date_str, variant, timestep_interval, timesteps):
 
 
 def blend_path_pysteps(year, month, date_str, variant, timestep_interval, timesteps):
-    folder = BASE / "blended_forecast" / str(year) / str(month)
+    folder = BASE / "blended_forecast" / str(year)/ str(month)
     suffix = DATASET_TO_VARIANT[variant]
 
     return folder / (
@@ -63,14 +82,14 @@ def nowcast_path(year, month, date_str, timestep_interval, timesteps):
     )
 
 def ifs_path(year, month, date_str, timestep_interval, timesteps):
-    folder = BASE / "IFS" / str(year) / str(month) / "pre-processed"
+    folder = BASE / "IFS" / str(year).zfill(2) / str(month).zfill(2) / "pre-processed"
     return folder / (
         f"IFS_{date_str}"
         f"_hres_interp_nlgrid_{timestep_interval}_{timesteps}.nc"
     )
 
 def extremesdt_path(year, month, date_str,timestep_interval, timesteps):
-    folder = BASE / "ExtremesDT" / str(year) / str(month) / "pre-processed"
+    folder = BASE / "ExtremesDT" / str(year).zfill(2) / str(month).zfill(2) / "pre-processed"
     return folder / (
         f"DestinE_ExtremesDT_{date_str}"
         f"_218.228-219.228-228.128_hres_interp_nlgrid_{timestep_interval}_{timesteps}.nc"
@@ -332,17 +351,27 @@ def load_settings_weights_blending(study_name, storage):
         ])
     else:
         clim_cor_values = clim_cor_values_base
-    
-    noise = best_values['use_noise']
+
     probmatching = best_values['use_probmatching']
 
-    custom_weights = {
-    "GAMMA": GAMMA,
-    "regr_pars": regr_pars,
-    "clim_cor_values": clim_cor_values,
-    "use_noise": noise,
-    "use_probmatching": probmatching
-    }
+    if 'use_noise' in best_values:
+        noise = best_values['use_noise']
+
+        custom_weights = {
+        "GAMMA": GAMMA,
+        "regr_pars": regr_pars,
+        "clim_cor_values": clim_cor_values,
+        "use_noise": noise,
+        "use_probmatching": probmatching
+        }
+
+    else:
+        custom_weights = {
+        "GAMMA": GAMMA,
+        "regr_pars": regr_pars,
+        "clim_cor_values": clim_cor_values,
+        "use_probmatching": probmatching
+        }
 
     return custom_weights
 
@@ -389,7 +418,10 @@ def load_weights(date,key, timestep_interval,timesteps, optimised=True):
         
         #use_blend ifs here because we need to determine which optimisation was best, and therefore which file to open, so use the be blend_ifs patha nd add nois and probmatch to it if needed.
         path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
-        noise = settings_best_blend['use_noise']
+        try:
+            noise = settings_best_blend['use_noise']
+        except:
+            noise=True
         probmatching = settings_best_blend['use_probmatching']
 
         if noise:
@@ -409,7 +441,29 @@ def load_weights(date,key, timestep_interval,timesteps, optimised=True):
         
         folder = str(path_blend)[:-4] +  "_weights.npy"
         
-        if key != 'blend_optimised_upper_cascade':
+        if settings_best_blend['GAMMA'].shape == (2,2):
+            weights_raw = np.load(folder, allow_pickle=True)
+            weights_raw = np.array(weights_raw, dtype =object)
+            print('weights_raw: ', weights_raw.item()['GAMMA'], weights_raw.item()['regr_pars'])
+            print('settings_best_blend: ', settings_best_blend['GAMMA'], settings_best_blend['regr_pars'])
+
+
+            if (settings_best_blend['GAMMA'] != weights_raw.item()['GAMMA'][:-4,:]).any() or (settings_best_blend['regr_pars']!= weights_raw.item()['regr_pars'][:,:-4]).any():
+                print('settings best blend and saved weights (only upper cascasde) did not match, so re-running blending')
+                GAMMA_base, regr_pars_base, clim_cor_values_base = load_climatological_weights()
+                custom_weights = {
+                                    "GAMMA":np.vstack([ settings_best_blend['GAMMA'], GAMMA_base[-4:]]) ,
+                                    "regr_pars": np.hstack([settings_best_blend['regr_pars'], regr_pars_base[:,-4:]]),
+                                    "clim_cor_values": clim_cor_values_base,
+                                }
+                precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights_raw = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], noise, probmatching)
+
+                weights_raw = np.array(weights_raw, dtype =object)
+            
+            assert (settings_best_blend['GAMMA'] == weights_raw.item()['GAMMA'][:-4,:]).all() and (settings_best_blend['regr_pars'] == weights_raw.item()['regr_pars'][:,:-4]).all()
+
+        
+        elif key != 'blend_optimised_upper_cascade':
             weights_raw = np.load(folder, allow_pickle=True)
             weights_raw = np.array(weights_raw, dtype =object)
             print('weights_raw: ', weights_raw.item()['GAMMA'], weights_raw.item()['regr_pars'])
@@ -417,7 +471,7 @@ def load_weights(date,key, timestep_interval,timesteps, optimised=True):
 
 
             if (settings_best_blend['GAMMA'] != weights_raw.item()['GAMMA'][:-2,:]).any() or (settings_best_blend['regr_pars']!= weights_raw.item()['regr_pars'][:,:-2]).any():
-                
+                print('settings best blend and saved weights did not match, so re-running blending')
                 GAMMA_base, regr_pars_base, clim_cor_values_base = load_climatological_weights()
                 custom_weights = {
                                     "GAMMA":np.vstack([ settings_best_blend['GAMMA'], GAMMA_base[-2:]]) ,
@@ -430,7 +484,7 @@ def load_weights(date,key, timestep_interval,timesteps, optimised=True):
             
             assert (settings_best_blend['GAMMA'] == weights_raw.item()['GAMMA'][:-2,:]).all() and (settings_best_blend['regr_pars'] == weights_raw.item()['regr_pars'][:,:-2]).all()
         
-        if key =='blend_optimised_upper_cascade':
+        elif key =='blend_optimised_upper_cascade':
             try:
                 weights_raw = np.load(folder, allow_pickle=True)
                 weights_raw = np.array(weights_raw, dtype =object)
@@ -452,6 +506,7 @@ def load_weights(date,key, timestep_interval,timesteps, optimised=True):
                 precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights_raw = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], noise, probmatching,  custom_extention = extention)
 
                 weights_raw = np.array(weights_raw, dtype =object)
+                
     else: 
         path_blend = blend_path(year, month, date_str, key, timestep_interval, timesteps) 
         folder = BASE / "blended_forecast" / "weights" / (str(path_blend)[:-4] +  "_weights.npy")
@@ -499,16 +554,52 @@ def load_saved_datasets(selected_keys, date,timestep_interval, timesteps):
     
     #use load_weights function here to make sure that the run that is loaded in is actually the most optimised one. 
     if 'blend_optimised' in selected_keys:
-        # try: 
+        try: 
+            study_name = f"pysteps_blending_{date_str}"
+            storage_weights = f'sqlite:///optuna_blending_study.db'
+            settings_best_blend = load_settings_weights_blending(study_name = study_name, storage = storage_weights)
+            
+            #this asserts  that the forecast thta is saved is actually made using the best weights (weights which it returns are not actually needed)
+            weights = load_weights(date,'blend_optimised', timestep_interval,timesteps, optimised=True)
+
+            path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
+            try:
+                noise = settings_best_blend['use_noise']
+            except:
+                noise=True
+            probmatching = settings_best_blend['use_probmatching']
+
+            if noise:
+                path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
+            
+            if probmatching:
+                path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
+
+            path_blend = str(path_blend)[:-4] + "_optimised_weights" + ".npy"
+
+            blend_optimised = open_memmap(path_blend)
+        
+        except:
+            study_name = f"pysteps_blending_{date_str}"
+            storage_weights = f'sqlite:///optuna_blending_study_{date_str}.db'
+            custom_weights =  load_settings_weights_blending(study_name, storage_weights)
+            precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], BLENDING_CONFIG['nostepsnoise'],BLENDING_CONFIG['probmatching'])
+            blend_optimised = open_memmap(blend_path(year, month, date_str, 'blend_optimised', timestep_interval, timesteps))
+
+    if 'blend_optimised_upper_cascade' in selected_keys:
+        
         study_name = f"pysteps_blending_{date_str}"
         storage_weights = f'sqlite:///optuna_blending_study.db'
         settings_best_blend = load_settings_weights_blending(study_name = study_name, storage = storage_weights)
         
         #this asserts  that the forecast thta is saved is actually made using the best weights (weights which it returns are not actually needed)
-        weights = load_weights(date,'blend_optimised', timestep_interval,timesteps, optimised=True)
+        weights = load_weights(date,'blend_optimised_upper_cascade', timestep_interval,timesteps, optimised=True)
 
         path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
-        noise = settings_best_blend['use_noise']
+        try:
+            noise = settings_best_blend['use_noise']
+        except:
+            noise=True
         probmatching = settings_best_blend['use_probmatching']
 
         if noise:
@@ -519,36 +610,120 @@ def load_saved_datasets(selected_keys, date,timestep_interval, timesteps):
 
         path_blend = str(path_blend)[:-4] + "_optimised_weights" + ".npy"
 
-        blend_optimised = open_memmap(path_blend)
-        # except:
-        #     study_name = f"pysteps_blending_{date_str}"
-        #     storage_weights = f'sqlite:///optuna_blending_study_{date_str}.db'
-        #     custom_weights =  load_settings_weights_blending(study_name, storage_weights)
-        #     precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], BLENDING_CONFIG['nostepsnoise'],BLENDING_CONFIG['probmatching'])
-        #     blend_optimised = open_memmap(blend_path(year, month, date_str, 'blend_optimised', timestep_interval, timesteps))
-
-    if 'blend_optimised_upper_cascade' in selected_keys:
-        # try: 
-        study_name = f"pysteps_blending_{date_str}"
-        storage_weights = f'sqlite:///optuna_blending_study.db'
-        settings_best_blend = load_settings_weights_blending(study_name = study_name, storage = storage_weights)
-        
-        #this asserts  that the forecast thta is saved is actually made using the best weights (weights which it returns are not actually needed)
-        weights = load_weights(date,'blend_optimised_upper_cascade', timestep_interval,timesteps, optimised=True)
-
-        path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
-        noise = settings_best_blend['use_noise']
-        probmatching = settings_best_blend['use_probmatching']
-
-        if noise:
-            path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
-        
-        if probmatching:
-            path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
-
-        path_blend = str(path_blend)[:-4] + "_optimised_weights_upper_cascade" + ".npy"
-
         blend_optimised_upper_cascade = open_memmap(path_blend)
+    
+    if 'blend_optimised_kmeans_estimation' in selected_keys:
+        #this asserts  that the forecast that is saved is actually made using the best weights (weights which it returns are not actually needed)
+        try:
+            load_cluster_dict = np.load(BASE / "machine_learning" / "category_dict_k9.npy", allow_pickle=True)
+            cluster = load_cluster_dict.item()[date_str]
+            cluster_weights_dict = np.load(BASE / "machine_learning" / f"mean_clusters_k9.npy", allow_pickle=True)
+            cluster_weights = cluster_weights_dict.item()[cluster]
+            probmatching = cluster_weights['use_probmatching']
+
+            path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
+            
+
+
+            #add noise extention here
+            path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
+
+            if probmatching:
+                path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
+
+            path_blend = str(path_blend)[:-4] + "_optimised_weights_kmeans_estimation_k9" + ".npy"
+            print('opening_kmeans estimation path:')
+            print(path_blend)
+
+            blend_optimised_kmeans_estimation = open_memmap(path_blend)
+        
+        except:
+            print('kmeans estimation blend does not exist, so calculating it using the cluster weights')            
+            load_cluster_dict = np.load(BASE / "machine_learning" / "category_dict_k9.npy", allow_pickle=True)
+            cluster = load_cluster_dict.item()[date_str]
+            cluster_weights_dict = np.load(BASE / "machine_learning" / f"mean_clusters_k9.npy", allow_pickle=True)
+            cluster_weights = cluster_weights_dict.item()[cluster]
+
+            custom_weights = {
+                            "GAMMA":np.vstack([ cluster_weights['GAMMA'], GAMMA_base[-4:]]) ,
+                            "regr_pars": np.hstack([cluster_weights['regr_pars'][:,:-4], regr_pars_base[:,-4:]]),
+                            "clim_cor_values": clim_cor_values_base,
+                        }
+            print('cluster_weights: ', custom_weights['GAMMA'], custom_weights['regr_pars'])
+            
+            probmatching = cluster_weights['use_probmatching']
+            noise = True
+            precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights_raw = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], noise, probmatching, custom_extention= "_kmeans_estimation_k9")
+
+            path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
+
+            #add noise extention here
+            path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
+
+
+            if probmatching:
+                path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
+
+
+            path_blend = str(path_blend)[:-4] + "_optimised_weights_kmeans_estimation_k9" + ".npy"
+            blend_optimised_kmeans_estimation = open_memmap(path_blend)
+        
+    if 'blend_optimised_machine_learning_prediciton' in selected_keys:
+        #this asserts  that the forecast thta is saved is actually made using the best weights (weights which it returns are not actually needed)
+        try:
+            cluster_weights_dict = np.load(BASE / "machine_learning" / f"mean_clusters_k9.npy", allow_pickle=True)
+
+            prediction_all = np.load(BASE/ "machine_learning" / "predictions_57_k9.npy", allow_pickle=True )
+            prediction = prediction_all.item()[date_str]
+
+            cluster_weights = cluster_weights_dict.item()[prediction]
+
+            probmatching = cluster_weights['use_probmatching']
+
+            path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
+
+            #add noise extention here
+            path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
+
+            if probmatching:
+                path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
+
+            path_blend = str(path_blend)[:-4] + "_optimised_weights_machine_learning_57_k9" + ".npy"
+
+            blend_optimised_machine_learning_prediciton = open_memmap(path_blend)
+        
+        except:
+            print('machine learning estimated blend does not exist, so calculating it using the predicted cluster weights')
+            
+            cluster_weights_dict = np.load(BASE / "machine_learning" / f"mean_clusters_k9.npy", allow_pickle=True)
+    
+            prediction_all = np.load(BASE/ "machine_learning" / "predictions_57_k9.npy", allow_pickle=True )
+            prediction = prediction_all.item()[date_str]
+
+            cluster_weights = cluster_weights_dict.item()[prediction]
+
+            custom_weights = {
+                            "GAMMA":np.vstack([ cluster_weights['GAMMA'], GAMMA_base[-4:]]) ,
+                            "regr_pars": np.hstack([cluster_weights['regr_pars'], regr_pars_base[:,-4:]]),
+                            "clim_cor_values": clim_cor_values_base,
+                        }
+            print('cluster_weights: ', custom_weights['GAMMA'], custom_weights['regr_pars'])
+            
+            probmatching = cluster_weights['use_probmatching']
+            noise = True
+            precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights_raw = blending_operational.run_blending_operational(date, BLENDING_CONFIG['historical_destine'], BLENDING_CONFIG['knmi_input_dir'], BLENDING_CONFIG['destineE_datafolder'], BLENDING_CONFIG['timesteps'], BLENDING_CONFIG['timestep_interval'], BLENDING_CONFIG['n_ens_members'], BLENDING_CONFIG['n_ens_members_dgmr'], BLENDING_CONFIG['weights_method'], custom_weights, BLENDING_CONFIG['return_weights'], BLENDING_CONFIG['re_do_blending'], BLENDING_CONFIG['multi_model'], noise, probmatching, custom_extention= "_machine_learning_57_k9")
+
+            path_blend = blend_path(year, month, date_str, 'blend_ifs', timestep_interval, timesteps) 
+
+            #add noise extention here
+            path_blend = str(path_blend)[:-4] + "_noise" + ".npy"
+
+            if probmatching:
+                path_blend = str(path_blend)[:-4] + "_probmatch" + ".npy"
+
+
+            path_blend = str(path_blend)[:-4] + "_optimised_weights_machine_learning_57_k9" + ".npy"
+            blend_optimised_machine_learning_prediciton = open_memmap(path_blend)
 
     if 'pysteps_nowcast' in selected_keys:
             pysteps_nowcast = open_memmap(blend_path_pysteps(year, month, date_str, 'pysteps_nowcast', timestep_interval, timesteps))

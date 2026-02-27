@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Blended forecast
-====================
-
-This tutorial shows how to construct a blended forecast from an ensemble nowcast
-using the STEPS approach and a Numerical Weather Prediction (NWP) rainfall
-forecast. The used datasets are from the Bureau of Meteorology, Australia.
-"""
-
 import time
 
 
@@ -20,7 +11,7 @@ import xarray as xr
 import pandas as pd
 from matplotlib import pyplot as plt
 
-
+#Make sure that the pysteps package is the custom fork saved in https://github.com/Joep1999/DestinE_code/pysteps_destine
 import pysteps
 
 from pysteps import io, rcparams, blending, motion
@@ -37,6 +28,7 @@ from scipy.interpolate import griddata
 import requests
 import sys
 
+# Insert the system path where you cloned the repository to here, so the packages can be loaded in
 sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
 
 from cdo import Cdo
@@ -51,6 +43,10 @@ from datetime import datetime, timedelta
 import shutil
 import warnings
 import pyproj
+
+from machine_learning_operational import build_training_data
+import joblib
+from pathlib import Path
 
 #load functions
 def cf_parameters_from_unit(unit: str) -> tuple[str, dict[str, str | None]]:
@@ -737,11 +733,24 @@ def pre_process_destinE_data(files, timestep_interval, timesteps, date_str, date
     
     return destinE_nlgrid_blend
 
-###############################################
-# LOAD KNMI RADAR DATA
-###############################################
 
-def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_datafolder,timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method, custom_weights = None, return_weights = False, re_do_blending = False, multi_model = True, noise = True, probmatching = True, pysteps_nowcast = False, custom_extention = None):
+
+def run_machine_learning(destineE_datafolder, date_str, multi_model):
+    kmeans_number = 9
+    BASE = Path(destineE_datafolder)
+    prediction_features = build_training_data(date_str, multi_model)
+    filename = BASE / "machine_learning" / f"RF_model_57_k{kmeans_number}.sav"
+    loaded_model = joblib.load(filename)
+    prediction_features_array = np.array([prediction_features])
+    probs = loaded_model.predict_proba(prediction_features_array)
+    predicted_class = np.argmax(probs, axis=1)
+
+    loaded_kmeans_weights = np.load(BASE / "machine_learning" / f'mean_clusters_k{kmeans_number}.npy', allow_pickle=True)
+    predicted_weights = loaded_kmeans_weights.item()[predicted_class[0]]
+
+    return predicted_weights
+
+def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_datafolder,timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method, custom_weights = None, return_weights = False, re_do_blending = False, multi_model = True, noise = True, probmatching = True, pysteps_nowcast = False, custom_extention = None, machine_learning_weights = True):
 
     start_time = time.time()
     gauge_adjusted = True
@@ -1007,6 +1016,9 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
 
     if custom_extention == None:
         custom_extention = ''
+    
+    if machine_learning_weights == True:
+        custom_extention = 'machine_learning' + custom_extention
 
     if pysteps_nowcast:
         path_blend = local_folder_today_blend + f'/Blended_forecast_{date_str}_step_min_{timestep_interval}_len_{timesteps}_pysteps_nowcast.npy'   
@@ -1015,7 +1027,34 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
         path_blend = local_folder_today_blend + f'/Blended_forecast_{date_str}_step_min_{timestep_interval}_len_{timesteps}_ens_dgmr_{n_ens_members_dgmr}_ens_{n_ens_members}{multi_extention}{noise_extention}{probmatching_extention}{custom_weights_extention}{custom_extention}.npy'   
         path_blend_weights = local_folder_today_blend + f'/Blended_forecast_{date_str}_step_min_{timestep_interval}_len_{timesteps}_ens_dgmr_{n_ens_members_dgmr}_ens_{n_ens_members}{multi_extention}{noise_extention}{probmatching_extention}{custom_weights_extention}{custom_extention}_weights.npy'
     
-    
+    #Calculate the machine learning weights here
+    if machine_learning_weights == True:
+        cluster_weights = run_machine_learning(destineE_datafolder, date_str, multi_model)
+        
+        GAMMA_base = np.array([
+                    [0.99805, 0.9933],
+                    [0.9925,  0.9752],
+                    [0.9776, 0.923],
+                    [0.9297,  0.750],
+                    [0.796,   0.367],
+                    [0.482,   0.069],
+                ])
+        regr_pars_base = np.array(
+            [
+                [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
+                [155.0, 220.0, 200.0, 75.0, 10e4, 10e4],
+            ]
+        )
+        clim_cor_values_base = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+
+        custom_weights = {
+                            "GAMMA":np.vstack([ cluster_weights['GAMMA'], GAMMA_base[-4:]]) ,
+                            "regr_pars": np.hstack([cluster_weights['regr_pars'], regr_pars_base[:,-4:]]),
+                            "clim_cor_values": clim_cor_values_base,
+                        }
+        #noise always set to true as simplification
+        noise = True
+        probmatching = cluster_weights['use_probmatching']
 
     if not os.path.exists(path_blend) or re_do_blending is True:
         oflow_method = pysteps.motion.get_method("lucaskanade")
@@ -1178,204 +1217,40 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
 
 
 if __name__=="__main__":
-    # date = datetime.now()
-    year = 2024
-    month = 8
-    day = 20
-    # days = [13]# [24,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,25,26,27,28]
-    hour = 17
-    date = datetime(year, month,day, hour)
-    timesteps = 24
-    timestep_interval = 30
-    n_ens_members = 20
-    n_ens_members_dgmr = 5
-    weights_method = 'bps'
-    gauge_adjusted = True
+
+    
+    # Change these paths to your local system folder to which you cloned the repository
+    gauge_adjusted = True       #If true uses the gauge adjusted radar data from KNMI
     if gauge_adjusted:
         knmi_input_dir = '/srv/data/nas/input_general/knmi_radar_gauge_adj/'
     else:
         knmi_input_dir = '/srv/data/nas/input_general/knmi_radar/'
     destineE_datafolder = '/srv/data/nas/project_data/p111_ecmwf_destine/'
-    historical_destine = True
-    multi_model = True
-    return_weights = False
-    custom_weights = False
-    re_do_blending = False, 
-    multi_model = True
-    # dates = ['2024050106', '2024050211', '2024050307', '2024050309', '2024050311', '2024050411', '2024050611', '2024051211', '2024051411', '2024052411', '2024052611', '2024052711', '2024050211', '2024050307', '2024050309', '2024050311', '2024050411', '2024050611', '2024051211', '2024051411', '2024052411', '2024052611', '2024052711']
-
-    #for day in dates:
-        # date = datetime(year, month,day, hour)
-        #date = datetime.strptime(day, '%Y%m%d%H')
-    multi_model=True
-    noise = True
-    probmatching = True
-    pysteps_nowcast = False
-    custom_extention= None
-    precip_forecast_mm, radar_precip_mm, nwp_precip_mm = run_blending_operational(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method, custom_weights, return_weights, re_do_blending, multi_model=True, noise = True, probmatching = True, pysteps_nowcast = False, custom_extention= None)
-    # Transform the data back into mm/h
-
-
-    # def plot_hotspot_and_timeseries(ens_fcst_all, case_index=0):
-    #     """
-    #     Identify and plot the grid cell with the highest ensemble precipitation
-    #     for a given forecast case, and show its ensemble time series.
-
-    #     Parameters
-    #     ----------
-    #     obs_all : np.ndarray
-    #         Observations [time, lat, lon]
-    #     ens_fcst_all : np.ndarray
-    #         Ensemble forecasts [time, member, lat, lon]
-    #     case_index : int
-    #         Index of the forecast case to inspect (default=0)
-    #     lats, lons : np.ndarray, optional
-    #         Latitude/longitude arrays for plotting
-    #     """
-    #     # --- Identify the hotspot grid cell
-    #     fcst_case = ens_fcst_all[case_index]  # [member, lat, lon]
-    #     ens_mean = np.mean(fcst_case, axis=0)
-    #     ens_max = np.max(fcst_case, axis=0)
-
-    #     # Find gridcell with maximum ensemble precipitation
-    #     hotspot_idx = np.unravel_index(np.argmax(ens_max), ens_max.shape)
-    #     lat_idx, lon_idx = hotspot_idx
-    #     hotspot_value = ens_max[lat_idx, lon_idx]
-
-    #     # --- Plot the spatial field with hotspot
-    #     # plt.figure(figsize=(7, 5))
-    #     # plt.imshow(ens_max, cmap="Blues", origin="lower")
-    #     # plt.scatter(lon_idx, lat_idx, color="red", s=80, label="Max gridcell")
-    #     # plt.colorbar(label="Max ensemble precipitation [mm]")
-    #     # plt.title(f"Ensemble Max Precipitation (case {case_index})\nMax={hotspot_value:.1f} mm")
-    #     # plt.legend()
-    #     # plt.tight_layout()
-    #     # plt.show()
-
-    #     # --- Plot the time series for that grid cell
-    #     cell_series = ens_fcst_all[:, :, lat_idx, lon_idx]  # [time, member]
-    #     mean_series = np.mean(cell_series, axis=1)
-
-    #     cell_series_accum = np.cumsum(cell_series, axis=0)
-    #     mean_series_accum = np.cumsum(mean_series, axis=0)
-
-    #     plt.figure(figsize=(7, 4))
-    #     plt.plot(mean_series_accum, "k-", lw=2, label="Ensemble mean")
-    #     plt.plot(cell_series_accum, lw=0.8, alpha=0.5)
-    #     plt.xlabel("Model timestep (10 minutes per timestep)")
-    #     plt.ylabel("Precipitation [mm]")
-    #     plt.title(f"Time Series at Max-Precip Grid Cell (lat={lat_idx}, lon={lon_idx})")
-    #     plt.legend()
-    #     plt.tight_layout()
-    #     plt.show()
-    #     # plt.savefig(
-    #     # destineE_datafolder + 'verification/ensemble_spread_hotspot_' + str(date_str) + '.png', dpi=300
-    #     # )
-
-    #     return {
-    #         "hotspot_index": (lat_idx, lon_idx),
-    #         "hotspot_value": hotspot_value,
-    #         "cell_series": cell_series,
-    #         "mean_series": mean_series,
-    #     }
-
-
-    # precip_forecast_mm_accum = precip_forecast_mm / 6
-
-    # plot_hotspot_and_timeseries(precip_forecast_mm_accum)
-
-    # GAMMA_op = np.array(
-    # [
-    #     [0.8465280875045617, 9953856098842685],
-    #     [0.798060517530864, 0.8100760644432494],
-    #     [0.6278655428103669, 0.6788592931858369],
-    #     [0.62389112336052, 0.6788592931858369],
-    #     [0.796, 0.367],
-    #     [0.482, 0.069],
-    # ]
-    # )
-
-    # regr_pars_op = np.array(
-    #     [
-    #         [104.43062745750896, 200.4775251962687, 126.27592137867425, 61.29290561340107, 50.0, 15.0],
-    #         [174.6912047475717, 201.33565306839364, 258.95231767209816, 59.115400009535236, 10e4, 10e4],
-    #     ]
-    # )
-    # clim_cor_values = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
-    # custom_weights_op = {
-    #     "GAMMA": GAMMA_op,
-    #     "regr_pars": regr_pars_op,
-    #     "clim_cor_values": clim_cor_values,
-    # }
-
-    # ################################################################################
-    # # Visualize the output
-    # # ~~~~~~~~~~~~~~~~~~~~
-    # #
-    # # The NWP rainfall forecast has a lower weight than the radar-based extrapolation
-    # # forecast at the issue time of the forecast (+0 min). Therefore, the first time
-    # # steps consist mostly of the extrapolation.
-    # # However, near the end of the forecast (+180 min), the NWP share in the blended
-    # # forecast has become more important and the forecast starts to resemble the
-    # # NWP forecast more.
-
-    # fig = plt.figure(figsize=(5, 12))
-
-    # leadtimes_min = [30, 60, 90, 120, 150, 180]
-    # leadtimes_min = [180,210,240,270,300,360]
-    # n_leadtimes = len(leadtimes_min)
-    # for n, leadtime in enumerate(leadtimes_min):
-    #     # Nowcast with blending into NWP
-
-    #     plt.subplot(n_leadtimes, 4, n * 4 + 1)
-    #     plot_precip_field(
-    #         precip_forecast_mm[1, int(leadtime / timesteps) - 1, :, :],
-    #         geodata=radar_metadata,
-    #         title=f"Blended forecast +{leadtime} min",
-    #         axis="on",
-    #         colorscale="STEPS-NL",
-    #         colorbar=False,
-    #     )
-
-    #     # Raw NWP forecast
-
-    #     plt.subplot(n_leadtimes, 4, n * 4 + 2)
-    #     plot_precip_field(
-    #         nwp_precip_mm[0, int(leadtime / timesteps) - 1, :, :],
-    #         geodata=radar_metadata,
-    #         title=f"NWP +{leadtime} min",
-    #         axis="on",
-    #         colorscale="STEPS-NL",
-    #         colorbar=False,
-    #     )
-
-    #     # Raw precip forecast
-    #     plt.subplot(n_leadtimes, 4, n * 4 + 3)
-
-    #     plot_precip_field(
-    #         radar_precip_mm[0, int(leadtime / timesteps) - 1, :, :],
-    #         geodata=radar_metadata,
-    #         title=f"Radar +{leadtime} min",
-    #         axis="on",
-    #         colorscale="STEPS-NL",
-    #         colorbar=False,
-    #     )
-        
-    #     plt.subplot(n_leadtimes, 4, n * 4 + 4)
-    #     plot_precip_field(
-    #         precip_forecast_mm_op[1, int(leadtime / timesteps) - 1, :, :],
-    #         geodata=radar_metadata,
-    #         title=f"Blended forecast +{leadtime} min",
-    #         axis="on",
-    #         colorscale="STEPS-NL",
-    #         colorbar=False,
-    #     )
-    # plt.savefig(
-    #     destineE_datafolder + 'verification/checking' + str(date_str) + '.png', dpi=300
-    # )
-    # plt.show()
-
-
     
-
+    #Either use a custom date here, or use the current datetime
+    # date = datetime.now()
+    year = 2023
+    month = 10
+    day = 3
+    hour = 5
+    date = datetime(year, month,day, hour)
     
+    #The settings used to create the blend:
+    timesteps = 24              #number of timesteps * timestep interval (minutes) determines the total lead time 
+    timestep_interval = 30
+    n_ens_members = 20          #Total number of ensemble members
+    n_ens_members_dgmr = 5      # number of ensembles generated using DGMR
+    weights_method = 'bps'      # The weights method used if custom weights or machine learning weights are not used
+    historical_destine = True   #If set to True, will use an already downloaded forecast. If set to False, a new Extremes DT forecast will be downloaded (currently does not support multi-model yet if set to false)
+    return_weights = False      #If set to true saves a numpy array with the weights used to make the forecast
+    custom_weights = False      #If set to false, uses the weights as determined by pySTEPS. If a dictionairy of weights is supplied, uses those weights
+    re_do_blending = False      #If set to true, re-do the blending even though there is already a blend with the current settings saved
+    multi_model=True            # If set to true uses both ExtremesDT and IFS forecasts. Only supproted for historical forecasts for now
+    noise = True                # If set to true uses noise in the blending algorithm (is overwritten if machine learning weights are seleced)
+    probmatching = True         # If set to true uses probmatching in the blending algorithm (is overwritten if machine learning weights are seleced)
+    pysteps_nowcast = False     #If set to True uses the pysteps nowcast instead of the DGMR nowcast
+    custom_extention= None      #If a custom extention is provided, adds this custom extention to the filename at the end
+    use_machine_learning_weights = True     # If set to true, uses the machine learning algorithm to determine the weights used by the blending algorithm and surpasses any custom weights given.
+    precip_forecast_mm, radar_precip_mm, nwp_precip_mm = run_blending_operational(date,historical_destine, knmi_input_dir, destineE_datafolder, timesteps, timestep_interval, n_ens_members,n_ens_members_dgmr, weights_method, custom_weights, return_weights, re_do_blending, multi_model=multi_model, noise = noise, probmatching = probmatching, pysteps_nowcast = pysteps_nowcast, custom_extention= custom_extention, machine_learning_weights = use_machine_learning_weights)
+
+

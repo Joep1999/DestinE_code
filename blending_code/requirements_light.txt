@@ -31,3 +31,6 @@ pillow==11.3.0
 opencv_python==4.11.0.86
 cdo==1.6.0
 netCDF4==1.7.2
+optuna==4.5.0
+optuna-dashboard==0.19.0
+streamlit==1.52.2
