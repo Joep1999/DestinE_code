@@ -28,6 +28,7 @@ from scipy.interpolate import griddata
 import requests
 import sys
 
+
 # Insert the system path where you cloned the repository to here, so the packages can be loaded in
 sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/")
 
@@ -38,6 +39,7 @@ cdo = Cdo()
 import dgmr_for_blending
 
 import download_destinE_data
+from post_process_to_xr import convert_npy_to_nc_file
 
 from datetime import datetime, timedelta
 import shutil
@@ -904,18 +906,18 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
 
     #TODO no option to change the timlength yet for DGMR (now only works if it accounts to 6 hours)
     local_folder_today_DGMR =  destineE_datafolder + 'DGMR/{}/{}/'.format(yr,mnth)
-    path_DGRMR = local_folder_today_DGMR + f'/DGMR_{date_str}_step_min_{timestep_interval}_len_{timesteps}_ens_{n_ens_members_dgmr}.npy'
+    path_DGMR = local_folder_today_DGMR + f'/DGMR_{date_str}_step_min_{timestep_interval}_len_{timesteps}_ens_{n_ens_members_dgmr}.npy'
 
     #Make sure local folder exists
     for folder in [local_folder_today_DGMR]:
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-    if not os.path.exists(path_DGRMR):
+    if not os.path.exists(path_DGMR):
         DGMR_det_long = dgmr_for_blending.run_dgmr_ensemble(R_xr.precip_intensity.values, ens_members = n_ens_members_dgmr, forecast_length = int((timestep_interval * timesteps) / 90))
-        np.save(path_DGRMR, DGMR_det_long, allow_pickle=True)
+        np.save(path_DGMR, DGMR_det_long, allow_pickle=True)
     else:
-        DGMR_det_long = np.load(path_DGRMR, allow_pickle=True)
+        DGMR_det_long = np.load(path_DGMR, allow_pickle=True)
 
     #Select only the relevant files
     if timestep_interval !=5:
@@ -928,7 +930,8 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
     
     #not used currently, but here to check if times are correct
     new_times_DGMR = pd.date_range(R_xr['time'][-1].values, pd.to_datetime(R_xr['time'][-1].values) + timedelta(minutes = 5 * timesteps * (timestep_interval / 5) ), freq=f"{timestep_interval}min")
-    
+    metadata_DGMR = metadata_radar
+    metadata_DGMR['timestamps'] = new_times_DGMR
     ############FINISHED TILL HERE
 
     ###############################################################################
@@ -1018,7 +1021,7 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
         custom_extention = ''
     
     if machine_learning_weights == True:
-        custom_extention = 'machine_learning' + custom_extention
+        custom_extention = '_machine_learning' + custom_extention
 
     if pysteps_nowcast:
         path_blend = local_folder_today_blend + f'/Blended_forecast_{date_str}_step_min_{timestep_interval}_len_{timesteps}_pysteps_nowcast.npy'   
@@ -1210,6 +1213,9 @@ def run_blending_operational(date,historical_destine, knmi_input_dir, destineE_d
     radar_precip_mm, _ = converter(DGMR_det_db, radar_metadata)
     nwp_precip_mm, _ = converter(nwp_precip, nwp_metadata)
     print((time.time() - start_time), "seconds")
+
+    convert_npy_to_nc_file(path_blend, path_DGMR, destinE_nlgrid_blend_metadata, metadata_DGMR)
+
     if return_weights:
         return precip_forecast_mm, radar_precip_mm, nwp_precip_mm, weights
     else:
@@ -1229,10 +1235,10 @@ if __name__=="__main__":
     
     #Either use a custom date here, or use the current datetime
     # date = datetime.now()
-    year = 2023
-    month = 10
-    day = 3
-    hour = 5
+    year = 2025
+    month = 6
+    day = 15
+    hour = 3
     date = datetime(year, month,day, hour)
     
     #The settings used to create the blend:
