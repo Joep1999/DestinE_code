@@ -1,0 +1,28 @@
+paths:
+    input_project: /nobackup_1/users/whan/floodmind/floodmind_rt/
+    input_general: input_general/
+    output: output/
+    input_radar_knmi: knmi_radar/
+    input_radar_gauge_adj_knmi: knmi_radar_gauge_adj/
+    input_destine: ExtremesDT/
+    input_ifs: IFS/
+    input_dgmr: DGMR/
+    input_blended: blended/
+
+# this is only used if settings.rt is false and is only here for testing specific dates. Not used in a real-time setting.
+rundate:
+    year: 2026
+    month: 04
+    day: 08
+    hour: 16
+
+
+settings:
+    verbose: True              # If true, prints more information about the process
+    param: 228                 # Parameter number of the forecast to use. For ExtremesDT, 228 is the total precipitation.
+    rt: False #False #True                   # If true, it uses the current datetime (rounded down to the closest 30-minutes) as the date for which to run the blending code. If false, it uses the custom date specified in the code.
+    timesteps: 24              # Number of timesteps * timestep interval (minutes) determines the total lead time 
+    timestep_interval: 30      # Minutes. What is the forecast time step
+    n_ens_members: 20          # Total number of ensemble members
+    n_ens_members_dgmr: 5      # number of ensembles generated using DGMR
+

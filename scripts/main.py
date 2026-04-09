@@ -5,7 +5,8 @@
 # -*- coding: utf-8 -*-
 
 import sys
-sys.path.insert(0, "/usr/people/whan/ResearchDataLab/floodMIND/running_rt/nowcast-blend-code/")
+#sys.path.insert(0, "/usr/people/whan/ResearchDataLab/floodMIND/running_rt/nowcast-blend-code/")
+sys.path.insert(0, "/usr/people/whan/ResearchDataLab/floodMIND/running_rt/DestinE_code/")
 import os
 import io
 import numpy as np
@@ -40,7 +41,15 @@ from nowcast_blend.nowcast.dgmr_for_blending import run_dgmr_ensemble
 #blend
 from nowcast_blend.blending.blending import blending_function
 
+import warnings
 
+# one function makes this warning: 
+# # /usr/people/whan/ResearchDataLab/floodMIND/running_rt/DestinE_code/nowcast_blend/preprocess/preprocess_radar.py:175: UserWarning: ypixelsize does not match y1, y2 and array shape, using ypixelsize for pixel size
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="nowcast_blend.preprocess.preprocess_radar"
+)
 
 # how to import the config interactively:
 #with hydra.initialize(version_base=None, config_path="configs"):
@@ -75,10 +84,10 @@ def main(cfg: DictConfig):
     else:
         if verb:
             log.info(f"Using date from the config as config == {cfg.settings.rt}")
-        yr = cfg.rundate.year
-        mnth = cfg.rundate.month
-        day = cfg.rundate.day
-        hour = cfg.rundate.hour
+        yr = int(cfg.rundate.year)
+        mnth = int(cfg.rundate.month)
+        day = int(cfg.rundate.day)
+        hour = int(cfg.rundate.hour)
         date = datetime(yr, mnth, day, hour)
         date_str = date.strftime('%Y%m%d%H')
         date_str_day = date_str[:-2]
@@ -104,7 +113,7 @@ def main(cfg: DictConfig):
     for folder in [ifs_path]:
         if not os.path.exists(folder):
             os.makedirs(folder)
-    ifs_file_original = ifs_path + f"IFS_{date_str}_init{ifs_init_time}_{cfg.settings.param}.grib"
+    ifs_file_original = ifs_path + f"IFS_{ifs_init_time}_{cfg.settings.param}.grib"
     ifs_file_preprocessed = ifs_path  + f'/IFS_{date_str}_init{ifs_init_time}_{cfg.settings.param}_hres_interp_nlgrid_{cfg.settings.timestep_interval}_{cfg.settings.timesteps}.nc' 
     
     
@@ -244,7 +253,7 @@ def main(cfg: DictConfig):
             #param = '228' # KW: change the param to match the filename used in the function
             #extention = 'grib'
             # checking the original files have the correct times:
-            destinE_nlgrid = xr.open_dataset(destine_file_original, engine="netcdf4")
+            destinE_nlgrid = xr.open_dataset(destine_file_original) #, engine="netcdf4"
             # Validate timestamps BEFORE preprocessing
             _ = validate_destine_file(destinE_nlgrid, R_xr, cfg)
 
@@ -265,7 +274,7 @@ def main(cfg: DictConfig):
           
         # Always preprocess (after validation or redownload)  
         destine_nlgrid_blend = pre_process_destine_data(
-            files=destine_file_original,
+            files=destine_file_original_nc,
             timestep_interval=cfg.settings.timestep_interval,
             timesteps=cfg.settings.timesteps, 
             date_str=date_str_day,
@@ -289,7 +298,7 @@ def main(cfg: DictConfig):
             extention = cfg.settings.destine_extension) #KW: removed "destineE_datafolder" and added historical_destine as argument
         #param = '228_regrid_nl'
         #extention = 'nc'
-        destine_nlgrid_blend = pre_process_destine_data(destine_file_original, cfg.settings.timestep_interval, cfg.settings.timesteps, date_str_day, date, radar_path, destine_path, cfg.settings.historical_destine, R_xr)
+        destine_nlgrid_blend = pre_process_destine_data(destine_file_original_nc, cfg.settings.timestep_interval, cfg.settings.timesteps, date_str_day, date, radar_path, destine_path, cfg.settings.historical_destine, R_xr)
 
     # endregion
     
@@ -299,13 +308,15 @@ def main(cfg: DictConfig):
         log.info(f"----------------------------------------------------------------------------------------------")
         log.info(f"2b. IFS data - download if needed and preprocess:")
         log.info(f"----------------------------------------------------------------------------------------------")
-        log.info("Put in the ifs stuff")
         if not os.path.exists(ifs_file_original):
             log.info(f"downloading ifs file: {ifs_file_original}")
-            download_ifs(ifs_init_time = ifs_init_time, ifs_file_original = ifs_file_original, param = cfg.settings.param)
+            download_ifs(ifs_init_time = ifs_init_time, ifs_file_original = ifs_file_original, cfg = cfg)
+        else:
+            if verb:
+                log.info(f"ifs file already downloaded: {ifs_file_original}")
         # preprocesses:
         if not os.path.exists(ifs_file_preprocessed):
-            pre_process_ifs_data(ifs_file_original, ifs_file_preprocessed, date, cfg.settings.timestep_interval, cfg.settings.timesteps, knmi_input_dir, radar_xr)
+            pre_process_ifs_data(ifs_file_original, ifs_file_preprocessed, cfg, date, cfg.settings.timestep_interval, cfg.settings.timesteps, radar_path, R_xr)
             
     
     
@@ -408,10 +419,11 @@ def main(cfg: DictConfig):
     log.info(f"----------------------------------------------------------------------------------------------")
     log.info(f"6. write to netcdf...")
     log.info(f"----------------------------------------------------------------------------------------------")
+    
     convert_npy_to_nc_file(blended_file, dgmr_file, destine_nlgrid_blend_metadata, metadata_DGMR)
 
     
-    log.info((time.time() - start_time)/60, "minutes")
+    log.info(f"{(time.time() - start_time)/60} minutes")
 
             
     

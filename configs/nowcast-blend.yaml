@@ -9,19 +9,19 @@ paths:
     input_dgmr: DGMR/
     input_blended: blended/
 
-# this is only used if settings.rt is false
+# this is only used if settings.rt is false and is only here for testing specific dates. Not used in a real-time setting.
 rundate:
     year: 2026
-    month: 03
-    day: 25
-    hour: 10
+    month: 04
+    day: 08
+    hour: 16
 
 settings:
     verbose: True              # If true, prints more information about the process
     param: 228                 # Parameter number of the forecast to use. For ExtremesDT, 228 is the total precipitation.
     destine_extension: grib    # The file extension of the forecast to use. For ExtremesDT, this should be grib.
     gauge_adjusted: True       # If true uses the gauge adjusted radar data from KNMI, if false it uses the non-gauge adjusted radar data from KNMI
-    rt: True #False #True                   # If true, it uses the current datetime (rounded down to the closest 30-minutes) as the date for which to run the blending code. If false, it uses the custom date specified in the code.
+    rt: False #False #True                   # If true, it uses the current datetime (rounded down to the closest 30-minutes) as the date for which to run the blending code. If false, it uses the custom date specified in the code.
     timesteps: 24              # Number of timesteps * timestep interval (minutes) determines the total lead time 
     timestep_interval: 30      # Minutes. What is the forecast time step
     n_ens_members: 20          # Total number of ensemble members
@@ -31,7 +31,7 @@ settings:
     return_weights: False      # If set to true saves a numpy array with the weights used to make the forecast
     custom_weights: False      # If set to false, uses the weights as determined by pySTEPS. If a dictionairy of weights is supplied, uses those weights
     re_do_blending: False      # If set to true, re-do the blending even though there is already a blend with the current settings saved
-    multi_model: True #False          # True    # If set to true uses both ExtremesDT and IFS forecasts. Only supproted for historical forecasts for now
+    multi_model: False #True          # True    # If set to true uses both ExtremesDT and IFS forecasts. Only supproted for historical forecasts for now
     noise: True                # If set to true uses noise in the blending algorithm (is overwritten if machine learning weights are seleced)
     probmatching: True         # If set to true uses probmatching in the blending algorithm (is overwritten if machine learning weights are seleced)
     pysteps_nowcast: False     # If set to True uses the pysteps nowcast instead of the DGMR nowcast

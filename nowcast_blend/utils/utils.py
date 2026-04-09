@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
@@ -80,6 +80,7 @@ def validate_destine_file(destinE_nlgrid, R_xr, cfg):
         log.info(f"expected times = {expected_times}")
         # Slice dataset
         time_slice = slice(expected_times[0], expected_times[-1])
+        destinE_nlgrid = ensure_destine_time_dim(destinE_nlgrid)  # Ensure time dimension exists and is sorted
         destinE_nlgrid_sel = destinE_nlgrid.sel(time=time_slice)
 
         actual_times = pd.to_datetime(destinE_nlgrid_sel['time'].values)
