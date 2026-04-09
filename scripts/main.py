@@ -5,7 +5,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
-sys.path.insert(0, "/usr/people/whan/ResearchDataLab/floodMIND/running_rt/nowcast-blend-code/")
+sys.path.insert(0, "/home/joep/git/wi-research/p111_ecmwf_destine/implementation_kirien/")
 import os
 import io
 import numpy as np
@@ -198,12 +198,12 @@ def main(cfg: DictConfig):
     log.info(f"2a. DestinE data - download if needed and preprocess:")
     log.info(f"----------------------------------------------------------------------------------------------")
     # Check if destine is available for todays date:
-    log.info(f"Checking if destine is available for date == {date}")
-    destine_avail = check_destine_available(date)
-    log.info(f"destine_avail == {destine_avail}")
-    if not destine_avail:
-        destine_date = (date - timedelta(days=1)).strftime("%Y%m%d")
-        log.info(f"Using date == {destine_date}")
+    # log.info(f"Checking if destine is available for date == {date}")
+    # destine_avail = check_destine_available(date)
+    # log.info(f"destine_avail == {destine_avail}")
+    # if not destine_avail:
+    #     destine_date = (date - timedelta(days=1)).strftime("%Y%m%d")
+    #     log.info(f"Using date == {destine_date}")
         
     
     
@@ -244,7 +244,7 @@ def main(cfg: DictConfig):
             #param = '228' # KW: change the param to match the filename used in the function
             #extention = 'grib'
             # checking the original files have the correct times:
-            destinE_nlgrid = xr.open_dataset(destine_file_original, engine="netcdf4")
+            destinE_nlgrid = xr.open_dataset(destine_file_original_nc, engine="netcdf4") #netcdf4 cfgrib
             # Validate timestamps BEFORE preprocessing
             _ = validate_destine_file(destinE_nlgrid, R_xr, cfg)
 
@@ -289,7 +289,7 @@ def main(cfg: DictConfig):
             extention = cfg.settings.destine_extension) #KW: removed "destineE_datafolder" and added historical_destine as argument
         #param = '228_regrid_nl'
         #extention = 'nc'
-        destine_nlgrid_blend = pre_process_destine_data(destine_file_original, cfg.settings.timestep_interval, cfg.settings.timesteps, date_str_day, date, radar_path, destine_path, cfg.settings.historical_destine, R_xr)
+        destine_nlgrid_blend = pre_process_destine_data(destine_file_original_nc, cfg.settings.timestep_interval, cfg.settings.timesteps, date_str_day, date, radar_path, destine_path, cfg.settings.historical_destine, R_xr)
 
     # endregion
     
@@ -411,13 +411,7 @@ def main(cfg: DictConfig):
     convert_npy_to_nc_file(blended_file, dgmr_file, destine_nlgrid_blend_metadata, metadata_DGMR)
 
     
-    log.info((time.time() - start_time)/60, "minutes")
-
-            
-    
-    
-    
-
+    log.info(f"{(time.time() - start_time)/60:.2f} minutes")
 
 
 if __name__ == "__main__":

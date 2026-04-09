@@ -49,8 +49,12 @@ def advection_correction_backward(R, T=5, t=1):
 
 
 def cdo_to_netcdf(date, destinE_data, destinE_data_cut, numerical_data, destineE_datafolder, filename, freq, historical_destine):  
-    log.info(f"before any processing: {destinE_data_cut.step.values[0]}, {destinE_data_cut.step.values[-1]}")
-    
+    try:
+        log.info(f"before any processing: {destinE_data_cut.step.values[0]}, {destinE_data_cut.step.values[-1]}")
+    except:
+        log.info(f"before any processing: {destinE_data_cut.time.values[0]}, {destinE_data_cut.time.values[-1]}")
+
+
     if historical_destine == True:
         lat_min, lat_max = destinE_data_cut.latitude.values.min(), destinE_data_cut.latitude.values.max()
         lon_min, lon_max = destinE_data_cut.longitude.values.min(), destinE_data_cut.longitude.values.max()
@@ -168,7 +172,7 @@ def pre_process_destine_data(files, timestep_interval, timesteps, date_str, date
         precipitation = accum_prcp - accum_prcp.shift({'time': 1})
         precipitation = precipitation.dropna('time', how="all")
 
-        # DOWNSCALE DESTINE DATA WITH RAINFARM TO RADAR RESOLUTION
+    # DOWNSCALE DESTINE DATA WITH RAINFARM TO RADAR RESOLUTION
     destinE_data_radar_scale = []
     H, W = precipitation.shape[1:]
     ds_factor = 4
@@ -233,7 +237,8 @@ def pre_process_destine_data(files, timestep_interval, timesteps, date_str, date
     log.info(f'ex dt time range: {exdt_time_slice}')
     
     # 
-    if np.size(destinE_data.time.values) == 1:
+    log.info(f'timesteps in destinE data {destinE_data.time.values}')
+    if np.size(destinE_data.time.values) != 1:
         len_nwp=len(destinE_nlgrid_blend['time'])
         log.info(f'len_nwp based on time: {len_nwp}')
         log.info(f'timesteps == {timesteps}')

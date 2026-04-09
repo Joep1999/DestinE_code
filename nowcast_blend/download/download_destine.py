@@ -7,9 +7,8 @@ from polytope.api import Client
 import logging
 log = logging.getLogger(__name__)
 
-
-def check_destine_available(date):
-    time_range_acc = "/".join(f"{i}-{i+1}" for i in range(1))
+def check_destine_available(date, destine_folder):
+    time_range_acc = "/".join(f"{i}-{i+1}" for i in range(2))
     date_str = date.strftime('%Y%m%d')  
     param = "228"
     request = {
@@ -30,7 +29,7 @@ def check_destine_available(date):
         address="polytope.lumi.apps.dte.destination-earth.eu",
         )
     try:
-        client.retrieve("destination-earth", request, file = "tmp_destine.grib")
+        client.retrieve("destination-earth", request, output_file = "tmp_destine.grib") 
         return True
     except Exception as e:
         log.warning(f"Data not available for {date}: {e}")
@@ -138,10 +137,10 @@ def download_destine(date, historical, destine_file_original, destine_file_origi
             'type': 'pf',
             'target': 'output.grib',
         }
-    if 'feature' in request:
-        extention = '.covjson'
-    else:
-        extention = '.grib'
+    # if 'feature' in request:
+    #     extention = '.covjson'
+    # else:
+    #     extention = '.grib'
     
     #    The data will be saved in the current working directory
     #destine_file_date  = destine_path_yearmonth + f'DestinE_ExtremesDT_{date_str}_{param}{extention}'
@@ -156,7 +155,7 @@ def download_destine(date, historical, destine_file_original, destine_file_origi
         log.info(f"Trying to download data for {destine_file_original}...")
         files = client.retrieve("destination-earth", request, output_file=destine_file_original)
         log.info(f"Success for {destine_file_original}")
-        return files, destine_file_original
+        # return files, destine_file_original
 
     except Exception as e:
         #KW: this is very silly. Instead of just taking the file for yesterdays date, it downloads yesterdays data and stores it as todays file.
@@ -198,3 +197,34 @@ def download_destine(date, historical, destine_file_original, destine_file_origi
         )
 
     return destine_file_original, destine_file_original_nc
+
+#to test the download
+# destine_file_original, destine_file_original_nc = download_destine(
+#                 date=datetime(2026,4,1,10),
+#                 historical=False,
+#                 destine_file_original='/srv/data/nas/project_data/p111_ecmwf_destine/ExtremesDT/2026/04/DestinE_ExtremesDT_2026040110_228.grib',
+#                 destine_file_original_nc='/srv/data/nas/project_data/p111_ecmwf_destine/ExtremesDT/2026/04/DestinE_ExtremesDT_2026040110_228_regrid_nl.nc',
+#                 param=228,
+#                 extention='.grib'
+#             )
+
+import hydra
+from omegaconf import DictConfig
+import logging
+
+@hydra.main(version_base=None, config_path="../../configs", config_name="nowcast-blend.yaml")
+def main(cfg: DictConfig):  
+    
+    destine_file_original, destine_file_original_nc = download_destine(
+                date=datetime(2026,7,1,10),
+                historical=False,
+                destine_file_original='/srv/data/nas/project_data/p111_ecmwf_destine/ExtremesDT/2026/04/DestinE_ExtremesDT_2026040110_228.grib',
+                destine_file_original_nc='/srv/data/nas/project_data/p111_ecmwf_destine/ExtremesDT/2026/04/DestinE_ExtremesDT_2026040110_228_regrid_nl.nc',
+                param=228,
+                extention='.grib'
+            )
+    
+    check_destine_available(datetime(2026,7,1,10), destine_folder=cfg.paths.input_project + '.grib')
+
+if __name__ == "__main__":
+    main()

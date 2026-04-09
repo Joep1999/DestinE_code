@@ -3,9 +3,9 @@ from datetime import datetime
 import numpy.typing as npt
 import numpy as np
 import xarray as xr
+import pandas as pd
 
 from nowcast_blend.preprocess.preprocess_radar import convert_input_to_xarray_dataset
-
 
 def convert_npy_to_nc_file(path_blend, path_nowcast,  metadata_blend, metadata_nowcast, path_nwp=None, metadata_nwp=None):
 
@@ -13,14 +13,18 @@ def convert_npy_to_nc_file(path_blend, path_nowcast,  metadata_blend, metadata_n
         precip=np.load(path_blend),
         quality=None,
         metadata=metadata_blend,
-        startdate=metadata_blend["timestamps"][0],
+        startdate= pd.Timestamp(metadata_blend["timestamps"][0]) ,
         timestep=10,
     )
+
+    if np.issubdtype(metadata_nowcast["timestamps"].dtype, np.datetime64):
+        metadata_nowcast["timestamps"] = metadata_nowcast["timestamps"].astype('datetime64[D]').astype(object)
+
     radar_nowcast = convert_input_to_xarray_dataset(
         precip=np.load(path_nowcast),
         quality=None,
         metadata=metadata_nowcast,
-        startdate=metadata_nowcast["timestamps"][0],
+        startdate=pd.Timestamp(metadata_nowcast["timestamps"][0]),
         timestep=10,
     )
 
