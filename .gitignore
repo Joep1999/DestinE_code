@@ -3,3 +3,4 @@ visualisations/using_blended_forecast_2.py
 visualisations/visualise_DGMR.py
 *.png
 *.pyc
+*__init__*

@@ -2,7 +2,7 @@
 #./run_main.sh 
 
 
-main_dir=/usr/people/whan/ResearchDataLab/floodMIND/running_rt/nowcast-blend-code/
+main_dir=/usr/people/whan/ResearchDataLab/floodMIND/running_rt/DestinE_code/
 
 cd ${main_dir}
 source /nobackup_1/users/whan/floodmind/floodmind_rt_env/bin/activate  

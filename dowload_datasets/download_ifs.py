@@ -1,6 +1,4 @@
-import logging
-log = logging.getLogger(__name__)
-
+# python dowload_datasets/download_ifs.py
 import os
 import re
 import xarray as xr
@@ -8,6 +6,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+import sys
+sys.path.insert(0, "./")  # Add the current directory to the Python path
 from nowcast_blend.preprocess.preprocess_destine import advection_correction_backward, cdo_to_netcdf
 
 from pysteps.downscaling import rainfarm
@@ -15,7 +15,43 @@ from pysteps.downscaling import rainfarm
 from cdo import Cdo 
 cdo = Cdo() 
 
-#def pre_process_IFS_data(date, timestep_interval, timesteps, knmi_input_dir, destineE_datafolder, historical_destine, radar_xr):
+import logging
+log = logging.getLogger(__name__)
+
+from ecmwfapi import ECMWFService
+
+
+def download_ifs(ifs_init_time, ifs_file_original, cfg):
+    
+    
+    server = ECMWFService("mars")
+    request = {
+        "area": "80/-20/-50/180",
+        "class": "od",
+        "date": ifs_init_time[:8],
+        "number": "1/to/50",  # ensemble members 1-50
+        "expver": "1", #
+        "grid": "0.05/0.05",
+        "levtype": "sfc",
+        "param": cfg.settings.param,
+        "step": "0/to/36/by/1", #time_range_acc,
+        "stream": "enfo",
+        #"target": local_file_today,
+        "time": f"{ifs_init_time[8:10]}:00:00",
+        "type": "pf",
+    }
+
+    # ---------------------------------------------------------------------
+    # DOWNLOAD grib
+    # ---------------------------------------------------------------------
+    try:
+        server.execute(request, ifs_file_original)
+        print(f"Download completed for {ifs_init_time}: {ifs_file_original}")
+    except Exception as e:
+        print(f"script terminated because of exception: {e}")
+        raise
+    
+    
 
 def pre_process_ifs_data(ifs_file_original, ifs_file_preprocessed, cfg, date, timestep_interval, timesteps, radar_path, R_xr):
     if cfg.settings.verbose:

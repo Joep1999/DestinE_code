@@ -8,13 +8,14 @@ paths:
     input_ifs: IFS/
     input_dgmr: DGMR/
     input_blended: blended_forecast/
+    input_machine_learning: machine_learning/
 
-# this is only used if settings.rt is false
+# this is only used if settings.rt is false and is only here for testing specific dates. Not used in a real-time setting.
 rundate:
     year: 2026
     month: 04
-    day: 07
-    hour: 10
+    day: 18
+    hour: 14
 
 settings:
     verbose: True              # If true, prints more information about the process
@@ -36,5 +37,5 @@ settings:
     probmatching: True         # If set to true uses probmatching in the blending algorithm (is overwritten if machine learning weights are seleced)
     pysteps_nowcast: False     # If set to True uses the pysteps nowcast instead of the DGMR nowcast
     custom_extention: None      # If a custom extention is provided, adds this custom extention to the filename at the end
-    use_machine_learning_weights: False #True     # If set to true, uses the machine learning algorithm to determine the weights used by the blending algorithm and surpasses any custom weights given.
+    use_machine_learning_weights: True     # If set to true, uses the machine learning algorithm to determine the weights used by the blending algorithm and surpasses any custom weights given.
     #KW: if this is false where does it use the existing ml weights?

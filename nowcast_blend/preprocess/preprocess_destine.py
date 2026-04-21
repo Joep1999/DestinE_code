@@ -149,6 +149,7 @@ def pre_process_destine_data(files, timestep_interval, timesteps, date_str, date
         #    concat_dim="step",
         #    engine="cfgrib"
         #)
+        print(files)
         destinE_data =  xr.open_dataset(files)
         log.info('DestinE data combined and loaded successfully when date.hour > 12')
     else:

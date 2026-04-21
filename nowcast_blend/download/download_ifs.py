@@ -4,7 +4,7 @@ log = logging.getLogger(__name__)
 from ecmwfapi import ECMWFService
 
 
-def download_ifs(ifs_init_time, ifs_file_original, param):
+def download_ifs(ifs_init_time, ifs_file_original, cfg):
     
     
     server = ECMWFService("mars")
@@ -16,7 +16,7 @@ def download_ifs(ifs_init_time, ifs_file_original, param):
         "expver": "1", #
         "grid": "0.05/0.05",
         "levtype": "sfc",
-        "param": param,
+        "param": cfg.settings.param,
         "step": "0/to/36/by/1", #time_range_acc,
         "stream": "enfo",
         #"target": local_file_today,

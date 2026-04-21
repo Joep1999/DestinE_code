@@ -18,7 +18,9 @@ def blending_function(blended_file,
                       nwp_precip,
                       DGMR_det_db,
                       radar_metadata,
-                      nwp_metadata):
+                      nwp_metadata,
+                      custom_weights=None,
+                      probmatching=None):
     ###############################################################################
     # For the initial time step (t=0), the NWP rainfall forecast is not that different
     # from the observed radar rainfall, but it misses some of the locations and
@@ -56,12 +58,19 @@ def blending_function(blended_file,
     
     converter = pysteps.utils.get_method("mm/h")
     
-    if config.settings.noise:
+    if config.settings.use_machine_learning_weights:
+        noise_method = 'nonparametric'
+    elif config.settings.noise:
         noise_method = 'nonparametric'
     else:
         noise_method = None
 
-    if config.settings.probmatching:
+    if config.settings.use_machine_learning_weights:
+        if probmatching:
+            prob_match = 'cdf'
+        else: 
+            prob_match = None
+    elif config.settings.probmatching:
         prob_match =  "cdf"
     else:
         prob_match = None
@@ -80,34 +89,6 @@ def blending_function(blended_file,
     #    path_blend_weights = local_folder_today_blend + f'/Blended_forecast_{date_str}_step_min_{timestep_interval}_len_{timesteps}_ens_dgmr_{n_ens_members_dgmr}_ens_{n_ens_members}{multi_extention}{noise_extention}{probmatching_extention}{custom_weights_extention}{custom_extention}_weights.npy'
     
     #Calculate the machine learning weights here
-    if config.settings.use_machine_learning_weights:
-        log.info(f"function not defined: run_machine_learning")
-        cluster_weights = run_machine_learning(destineE_datafolder, date_str, multi_model)
-        
-        GAMMA_base = np.array([
-                    [0.99805, 0.9933],
-                    [0.9925,  0.9752],
-                    [0.9776, 0.923],
-                    [0.9297,  0.750],
-                    [0.796,   0.367],
-                    [0.482,   0.069],
-                ])
-        regr_pars_base = np.array(
-            [
-                [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
-                [155.0, 220.0, 200.0, 75.0, 10e4, 10e4],
-            ]
-        )
-        clim_cor_values_base = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
-
-        custom_weights = {
-                            "GAMMA":np.vstack([ cluster_weights['GAMMA'], GAMMA_base[-4:]]) ,
-                            "regr_pars": np.hstack([cluster_weights['regr_pars'], regr_pars_base[:,-4:]]),
-                            "clim_cor_values": clim_cor_values_base,
-                        }
-        #noise always set to true as simplification
-        noise = True
-        probmatching = cluster_weights['use_probmatching']
 
     if not os.path.exists(blended_file) or config.settings.re_do_blending is True:
         oflow_method = motion.get_method("lucaskanade")
@@ -171,6 +152,33 @@ def blending_function(blended_file,
                 # domain= 'spectral',
                 vel_pert_method=None,
             )
+        elif config.settings.use_machine_learning_weights:
+            precip_forecast_stacked = blending.steps.forecast(
+                precip=radar_precip[1:],
+                precip_nowcast=DGMR_det_db,
+                nowcasting_method="external_nowcast",
+                mask_method=None,
+                precip_models=nwp_precip,
+                velocity=velocity_radar,
+                velocity_models=velocity_nwp,
+                timesteps=config.settings.timesteps,
+                timestep=config.settings.timestep_interval,
+                issuetime=pd.to_datetime(radar_metadata['timestamps'][-1]),
+                n_ens_members=config.settings.n_ens_members,
+                fft_method='pyfftw',
+                # resample_distribution=False,
+                precip_thr=radar_metadata["threshold"],
+                kmperpixel=radar_metadata["xpixelsize"] / 1000.0,
+                # noise_stddev_adj=noise, #major difference from pysteps paper
+                noise_method=noise_method, #major difference from pysteps paper
+                weights_method = config.settings.weights_method,
+                custom_weights = custom_weights,
+                return_weights = config.settings.return_weights,
+                probmatching_method=prob_match, ##major difference from pysteps paper, used before: "cdf"
+                # domain= 'spectral',
+                vel_pert_method=None,
+            )
+            
         else:    
             precip_forecast_stacked = blending.steps.forecast(
                 precip=radar_precip[1:],

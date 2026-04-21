@@ -37,10 +37,22 @@ from nowcast_blend.preprocess.preprocess_ifs import pre_process_ifs_data
 
 #nowcast
 from nowcast_blend.nowcast.dgmr_for_blending import run_dgmr_ensemble
+
+#machine_learning
+from nowcast_blend.machine_learning.machine_learning import run_machine_learning
+
 #blend
 from nowcast_blend.blending.blending import blending_function
 
+import warnings
 
+# one function makes this warning: 
+# # /usr/people/whan/ResearchDataLab/floodMIND/running_rt/DestinE_code/nowcast_blend/preprocess/preprocess_radar.py:175: UserWarning: ypixelsize does not match y1, y2 and array shape, using ypixelsize for pixel size
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="nowcast_blend.preprocess.preprocess_radar"
+)
 
 # how to import the config interactively:
 #with hydra.initialize(version_base=None, config_path="configs"):
@@ -75,10 +87,10 @@ def main(cfg: DictConfig):
     else:
         if verb:
             log.info(f"Using date from the config as config == {cfg.settings.rt}")
-        yr = cfg.rundate.year
-        mnth = cfg.rundate.month
-        day = cfg.rundate.day
-        hour = cfg.rundate.hour
+        yr = int(cfg.rundate.year)
+        mnth = int(cfg.rundate.month)
+        day = int(cfg.rundate.day)
+        hour = int(cfg.rundate.hour)
         date = datetime(yr, mnth, day, hour)
         date_str = date.strftime('%Y%m%d%H')
         date_str_day = date_str[:-2]
@@ -104,7 +116,7 @@ def main(cfg: DictConfig):
     for folder in [ifs_path]:
         if not os.path.exists(folder):
             os.makedirs(folder)
-    ifs_file_original = ifs_path + f"IFS_{date_str}_init{ifs_init_time}_{cfg.settings.param}.grib"
+    ifs_file_original = ifs_path + f"IFS_{ifs_init_time}_{cfg.settings.param}.grib"
     ifs_file_preprocessed = ifs_path  + f'/IFS_{date_str}_init{ifs_init_time}_{cfg.settings.param}_hres_interp_nlgrid_{cfg.settings.timestep_interval}_{cfg.settings.timesteps}.nc' 
     
     
@@ -127,6 +139,10 @@ def main(cfg: DictConfig):
     for folder in [blended_path]:
         if not os.path.exists(folder):
             os.makedirs(folder)
+
+    # blended paths:
+    machine_learning_path =  base_input_dir + cfg.paths.input_machine_learning
+         
     
     if cfg.settings.pysteps_nowcast:
         blended_file = blended_path + f'/Blended_forecast_{date_str}_step_min_{cfg.settings.timestep_interval}_len_{cfg.settings.timesteps}_pysteps_nowcast.npy'
@@ -244,7 +260,7 @@ def main(cfg: DictConfig):
             #param = '228' # KW: change the param to match the filename used in the function
             #extention = 'grib'
             # checking the original files have the correct times:
-            destinE_nlgrid = xr.open_dataset(destine_file_original_nc, engine="netcdf4") #netcdf4 cfgrib
+            destinE_nlgrid = xr.open_dataset(destine_file_original) #, engine="netcdf4"
             # Validate timestamps BEFORE preprocessing
             _ = validate_destine_file(destinE_nlgrid, R_xr, cfg)
 
@@ -265,7 +281,7 @@ def main(cfg: DictConfig):
           
         # Always preprocess (after validation or redownload)  
         destine_nlgrid_blend = pre_process_destine_data(
-            files=destine_file_original,
+            files=destine_file_original_nc,
             timestep_interval=cfg.settings.timestep_interval,
             timesteps=cfg.settings.timesteps, 
             date_str=date_str_day,
@@ -299,13 +315,15 @@ def main(cfg: DictConfig):
         log.info(f"----------------------------------------------------------------------------------------------")
         log.info(f"2b. IFS data - download if needed and preprocess:")
         log.info(f"----------------------------------------------------------------------------------------------")
-        log.info("Put in the ifs stuff")
         if not os.path.exists(ifs_file_original):
             log.info(f"downloading ifs file: {ifs_file_original}")
-            download_ifs(ifs_init_time = ifs_init_time, ifs_file_original = ifs_file_original, param = cfg.settings.param)
+            download_ifs(ifs_init_time = ifs_init_time, ifs_file_original = ifs_file_original, cfg = cfg)
+        else:
+            if verb:
+                log.info(f"ifs file already downloaded: {ifs_file_original}")
         # preprocesses:
         if not os.path.exists(ifs_file_preprocessed):
-            pre_process_ifs_data(ifs_file_original, ifs_file_preprocessed, date, cfg.settings.timestep_interval, cfg.settings.timesteps, knmi_input_dir, radar_xr)
+            pre_process_ifs_data(ifs_file_original, ifs_file_preprocessed, cfg, date, cfg.settings.timestep_interval, cfg.settings.timesteps, radar_path, R_xr)
             
     
     
@@ -388,30 +406,88 @@ def main(cfg: DictConfig):
         nwp_precip = nwp_precip[None, :]
         
     # endregion
+
+    # region - machine learning
+
+    log.info(f"----------------------------------------------------------------------------------------------")
+    log.info(f"5. Determining machine learning weights if enabled... ")
+    log.info(f"----------------------------------------------------------------------------------------------")
+
+    if cfg.settings.use_machine_learning_weights:
+            log.info(f"machine learning weights enabled, running!")
+            cluster_weights = run_machine_learning(machine_learning_path, date_str, destine_nlgrid_blend_val, DGMR_det)
+            
+            GAMMA_base = np.array([
+                        [0.99805, 0.9933],
+                        [0.9925,  0.9752],
+                        [0.9776, 0.923],
+                        [0.9297,  0.750],
+                        [0.796,   0.367],
+                        [0.482,   0.069],
+                    ])
+            regr_pars_base = np.array(
+                [
+                    [130.0, 165.0, 120.0, 55.0, 50.0, 15.0],
+                    [155.0, 220.0, 200.0, 75.0, 10e4, 10e4],
+                ]
+            )
+            clim_cor_values_base = np.array([0.848, 0.537, 0.237, 0.065, 0.02, 0.0044])
+
+            custom_weights = {
+                                "GAMMA":np.vstack([ cluster_weights['GAMMA'], GAMMA_base[-4:]]) ,
+                                "regr_pars": np.hstack([cluster_weights['regr_pars'], regr_pars_base[:,-4:]]),
+                                "clim_cor_values": clim_cor_values_base,
+                            }
+            #noise always set to true as simplification
+            noise = True
+            probmatching = cluster_weights['use_probmatching']
+
     
     # region - blending
     log.info(f"----------------------------------------------------------------------------------------------")
-    log.info(f"5. Do the blending...")
+    log.info(f"6. Do the blending...")
     log.info(f"----------------------------------------------------------------------------------------------")
-    blending_function(
-        blended_file = blended_file, 
-        blended_file_weights=blended_file_weights,
-        config=cfg,
-        radar_precip=radar_precip,
-        nwp_precip=nwp_precip,
-        DGMR_det_db=DGMR_det_db,
-        radar_metadata=radar_metadata,
-        nwp_metadata=nwp_metadata)
+    
+    if cfg.settings.use_machine_learning_weights:
+        blending_function(
+            blended_file = blended_file, 
+            blended_file_weights=blended_file_weights,
+            config=cfg,
+            radar_precip=radar_precip,
+            nwp_precip=nwp_precip,
+            DGMR_det_db=DGMR_det_db,
+            radar_metadata=radar_metadata,
+            nwp_metadata=nwp_metadata,
+            custom_weights = custom_weights,
+            probmatching = probmatching)
+    else:
+        blending_function(
+            blended_file = blended_file, 
+            blended_file_weights=blended_file_weights,
+            config=cfg,
+            radar_precip=radar_precip,
+            nwp_precip=nwp_precip,
+            DGMR_det_db=DGMR_det_db,
+            radar_metadata=radar_metadata,
+            nwp_metadata=nwp_metadata)
+           
     
     # endregion
     
     log.info(f"----------------------------------------------------------------------------------------------")
     log.info(f"6. write to netcdf...")
     log.info(f"----------------------------------------------------------------------------------------------")
+    
     convert_npy_to_nc_file(blended_file, dgmr_file, destine_nlgrid_blend_metadata, metadata_DGMR)
 
     
-    log.info(f"{(time.time() - start_time)/60:.2f} minutes")
+    log.info(f"{(time.time() - start_time)/60} minutes")
+
+            
+    
+    
+    
+
 
 
 if __name__ == "__main__":

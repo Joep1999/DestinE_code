@@ -197,7 +197,8 @@ def convert_input_to_xarray_dataset(
                 "units": attrs["units"],
                 "standard_name": attrs["standard_name"],
                 "long_name": attrs["long_name"],
-                "grid_mapping": "projection",
+                "grid_mapping": "polar_stereographic",
+                "coordinates" : "lat lon",
             },
         )
     }
